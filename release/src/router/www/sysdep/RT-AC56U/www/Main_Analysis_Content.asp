@@ -1,1 +1,1 @@
-/home/router/asuswrt-merlin.ng/release/src/router/www/sysdep/RT-AC86U/www/Main_Analysis_Content.asp
+../../RT-AC86U/www/Main_Analysis_Content.asp
