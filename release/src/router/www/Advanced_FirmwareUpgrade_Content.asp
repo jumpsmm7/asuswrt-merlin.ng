@@ -278,9 +278,9 @@ function initial(){
 		document.getElementById("fwcheck_tr").style.display = "none";
 	}
 	else{
-		if(!live_update_support || !HTTPS_support || ("<% nvram_get("firmware_check_enable"); %>" != "1")){
+		if(!live_update_support || !HTTPS_support){
 			document.getElementById("update_div").style.display = "none";
-			document.getElementById("fw_tr").style.display = "none";
+//			document.getElementById("fw_tr").style.display = "none";
 			document.getElementById("linkpage_div").style.display = "";
 			helplink = get_helplink();
 			document.getElementById("linkpage").href = helplink;
