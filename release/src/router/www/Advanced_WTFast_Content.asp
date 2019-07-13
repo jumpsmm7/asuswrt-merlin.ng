@@ -473,7 +473,7 @@ function addRule(){
 		change_add_btn(0);
 		return false;
 	}
-	else if(check_macaddr(document.form.clientmac_x_0, check_hwaddr_flag(document.form.clientmac_x_0)) == true){
+	else if(check_macaddr(document.form.clientmac_x_0, check_hwaddr_flag(document.form.clientmac_x_0,'inner')) == true){
 		Object.keys(wtfast_rulelist_array).forEach(function(key){
 			if(wtfast_rulelist_array[key][1].toUpperCase() == mac){
 				alert("<#JS_duplicate#>");
@@ -618,7 +618,8 @@ function show_rulelist(){
 			code += '<td style="width:15%"><div><img src = "images/New_ui/delete.svg" onMouseOver="this.src=\'images/New_ui/delete_hover.svg\'" onMouseOut="this.src=\'images/New_ui/delete.svg\'"style="width:25px; height:25px; cursor:pointer;" onclick="delRule(this);"></div></td>';
 			code += '</tr>';
 			code += '<tr><td colspan="5"><div style="width:100%;height:1px;background-color:#660000"></div></td></tr>';
-			clientListEventData.push({"mac" : clientMac, "name" : clientName, "ip" : clientIP, "callBack" : "WTFast"});
+			if(validator.mac_addr(clientMac))
+				clientListEventData.push({"mac" : clientMac, "name" : clientName, "ip" : clientIP, "callBack" : "WTFast"});
 		});
 	}
 	code +='</table>';

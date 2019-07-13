@@ -121,7 +121,7 @@ var flag = '<% get_parameter("flag"); %>';
 var realip_state = "";
 
 var StatusList = {
-	"NoInetrnet": "Internet is disconnected. Please check your WAN connection for remote control",
+	"NoInetrnet": "<#Alexa_Status_Disconnect#>",
 	"SvrFail": "Server connection failed",
 	"StepAccount": "<#Alexa_Status_Account#>",
 	"EnableRemoteCtrl": "<#Alexa_Register1#>",
@@ -424,7 +424,7 @@ function show_account_state(){
 								<td bgcolor="#4D595D" valign="top">
 									<div>&nbsp;</div>
 									<div id="formfonttitle" class="formfonttitle">Alexa & IFTTT - IFTTT</div>
-									<div id="divSwitchMenu" style="margin-top:-40px;float:right;"><div style="width:110px;height:30px;float:left;border-top-left-radius:8px;border-bottom-left-radius:8px;" class="block_filter"><a href="Advanced_Smart_Home_Alexa.asp"><div class="block_filter_name">Amazon Alexa</div></a></div><div style="width:110px;height:30px;float:left;border-top-right-radius:8px;border-bottom-right-radius:8px;" class="block_filter_pressed"><div class="tab_font_color" style="text-align:center;padding-top:5px;font-size:14px">IFTTT</div></div></div>
+									<div id="divSwitchMenu" style="margin-top:-40px;float:right;"><div style="width:150px;height:30px;float:left;border-top-left-radius:8px;border-bottom-left-radius:8px;" class="block_filter"><a href="Advanced_Smart_Home_Alexa.asp"><div class="block_filter_name"><#Alexa_Title#></div></a></div><div style="width:110px;height:30px;float:left;border-top-right-radius:8px;border-bottom-right-radius:8px;" class="block_filter_pressed"><div class="tab_font_color" style="text-align:center;padding-top:5px;font-size:14px">IFTTT</div></div></div>
 									<div style="margin:10px 0 10px 5px;" class="splitLine"></div>
 									<div class="div_table">
 											<div class="div_tr">

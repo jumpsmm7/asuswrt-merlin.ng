@@ -707,6 +707,76 @@ static int _find_vpnc_idx_by_ovpn_unit(const int ovpn_unit)
 	return -1;
 }
 
+void vpnc_ovpn_set_dns(int ovpn_unit)
+{
+	char nvname[16] = {0};
+	char *old = NULL;
+	char *new = NULL;
+	size_t size = 0;
+	char buf[128];
+	char addr[16];
+	FILE *fp = NULL;
+
+	snprintf(nvname, sizeof(nvname), "vpnc%d_dns", _find_vpnc_idx_by_ovpn_unit(ovpn_unit));
+
+	fp = fopen("/etc/openvpn/resolv.conf", "r");
+	if (!fp) {
+		//_dprintf("read /etc/openvpn/resolv.conf fail\n");
+		return;
+	}
+	while(fgets(buf, sizeof(buf), fp) != NULL)
+	{
+		//nameserver xxx.xxx.xxx.xxx
+		if(sscanf (buf,"nameserver %15s", addr) != 1)
+		{
+			_dprintf("\n=====\nunknown %s\n=====\n", buf);
+			continue;
+		}
+
+		trim_r(addr);
+
+		old = nvram_get(nvname);
+		if (*old)
+		{
+			size = strlen(old) + strlen(addr) + 2;
+			new = malloc(size);
+			if(new)
+			{
+				snprintf(new, size, "%s %s", old, addr);
+				nvram_set(nvname, new);
+				free(new);
+			}
+			else
+			{
+				_dprintf("vpnc_ovpn_update_dns fail\n");
+				continue;
+			}
+		}
+		else
+		{
+			nvram_set(nvname, addr);
+		}
+	}
+	fclose(fp);
+}
+
+void vpnc_handle_dns_policy_rule(const VPNC_ROUTE_CMD cmd, const int vpnc_id)
+{
+	char nvname[16], cmd_str[8], id_str[8];
+	char tmp[32];
+	char *vpn_dns, *next;
+
+	snprintf(nvname, sizeof(nvname), "vpnc%d_dns", vpnc_id);
+	snprintf(cmd_str, sizeof(cmd_str), "%s", (cmd == VPNC_ROUTE_DEL)? "del": "add");
+	snprintf(id_str, sizeof(id_str), "%d", vpnc_id);
+
+	vpn_dns = nvram_safe_get(nvname);
+	foreach(tmp, vpn_dns, next) {
+		//_dprintf("dns %s\n", tmp);
+		eval("ip", "rule", cmd_str, "from", "0/0", "to", tmp, "table", id_str, "priority", VPNC_RULE_PRIORITY);
+	}
+}
+
 /*******************************************************************
 * NAME: vpnc_ovpn_up_main
 * AUTHOR: Andy Chiu
@@ -752,6 +822,7 @@ int vpnc_ovpn_up_main(int argc, char **argv)
 		nvram_set(strlcat_r(prefix, "dns", tmp, sizeof(tmp)), "");	//clean dns
 
 		ovpn_up_handler(unit);
+		vpnc_ovpn_set_dns(unit);
 		update_resolvconf();
 
 		//set route table
@@ -798,6 +869,11 @@ int vpnc_ovpn_up_main(int argc, char **argv)
 			++cnt;
 		}
 		nvram_set_int(strlcat_r(prefix, "remote_num", tmp, sizeof(tmp)), cnt);
+
+#ifdef USE_MULTIPATH_ROUTE_TABLE
+		//set dns server policy rule
+		vpnc_handle_dns_policy_rule(VPNC_ROUTE_ADD, vpnc_idx);
+#endif
 	}
 	return 0;
 	
@@ -841,6 +917,9 @@ int vpnc_ovpn_down_main(int argc, char **argv)
 		update_resolvconf();
 
 #ifdef USE_MULTIPATH_ROUTE_TABLE	
+		//clean dns server policy rule
+		vpnc_handle_dns_policy_rule(VPNC_ROUTE_DEL, vpnc_idx);
+
 		//clean routing rule
 		clean_routing_rule_by_vpnc_idx(vpnc_idx);
 
@@ -1703,6 +1782,19 @@ start_vpnc_by_unit(const int unit)
 			return -1;
 		}
 
+#ifdef HND_ROUTER
+		/* workaround for ppp packets are dropped by fc GRE learning when pptp server / client enabled */
+		char wan_proto[16];
+		snprintf(wan_proto, sizeof(wan_proto), "%s", nvram_safe_get(strcat_r(wan_prefix, "proto", tmp)));
+		if (nvram_match("fc_disable", "0") &&
+			(!strcmp(wan_proto, "pppoe") ||
+			 !strcmp(wan_proto, "pptp") ||
+			 !strcmp(wan_proto, "l2tp"))) {
+			dbg("[%s, %d] Flow Cache Learning of GRE flows Tunnel: DISABLED, PassThru: ENABLED\n", __FUNCTION__, __LINE__);
+			eval("fc", "config", "--gre", "0");
+		}
+#endif
+
 		umask(mask);
 
 		/* route for pptp/l2tp's server */
@@ -1923,7 +2015,11 @@ stop_vpnc_by_unit(const int unit)
 		    kill_pidfile_s(pidfile, SIGTERM) == 0) {
 			usleep(3000*1000);
 			kill_pidfile_tk(pidfile);
-		}	
+		}
+#ifdef HND_ROUTER
+		/* workaround for ppp packets are dropped by fc GRE learning when pptp server / client enabled */
+		if (nvram_match("fc_disable", "0")) eval("fc", "config", "--gre", "1");
+#endif
 	}
 	else if(VPNC_PROTO_OVPN == prof->protocol)
 	{
@@ -2069,7 +2165,7 @@ int set_routing_table(const int cmd, const int vpnc_id)
 					snprintf(tmp2, sizeof(tmp2), "remote_%d", i);
 					eval("ip", "route", "add", nvram_safe_get(strlcat_r(prefix, tmp2, tmp, sizeof(tmp))), 
 						"via", nvram_safe_get(strlcat_r(wan_prefix, "gateway", tmp, sizeof(tmp))), 
-						"dev", nvram_safe_get(strlcat_r(wan_prefix, "ifname", tmp, sizeof(tmp))),
+						"dev", nvram_safe_get(strlcat_r(wan_prefix, "gw_ifname", tmp, sizeof(tmp))),
 						"table", id_str);
 				}
 

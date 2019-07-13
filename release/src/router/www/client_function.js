@@ -106,6 +106,8 @@ var totalClientNum = {
 	wireless_ifnames: []
 }
 
+var AiMeshTotalClientNum = [];
+
 var setClientAttr = function(){
 	this.hostname = "";
 	this.type = "0";
@@ -155,6 +157,7 @@ function genClientList(){
 	totalClientNum.online = 0;
 	totalClientNum.wired = 0;
 	totalClientNum.wireless = 0;
+	AiMeshTotalClientNum = [];
 	for(var i=0; i<wl_nband_title.length; i++) totalClientNum.wireless_ifnames[i] = 0;
 
 	if(originData.fromNetworkmapd.length > 0) {
@@ -169,13 +172,18 @@ function genClientList(){
 			if(typeof clientList[thisClientMacAddr] == "undefined"){
 				clientList.push(thisClientMacAddr);
 				clientList[thisClientMacAddr] = new setClientAttr();
-				clientList[thisClientMacAddr].from = "networkmapd";
+				clientList[thisClientMacAddr].from = thisClient.from;
 			}
 			else{
 				clientList[thisClientMacAddr].macRepeat++;
-				totalClientNum.online++;
+				if(clientList[thisClientMacAddr].isOnline)
+					totalClientNum.online++;
 				continue;
 			}
+
+			clientList[thisClientMacAddr].isOnline = (thisClient.isOnline == "1") ? true : false;
+			if(clientList[thisClientMacAddr].isOnline)
+				totalClientNum.online++;
 
 			if(!downsize_4m_support) {
 				clientList[thisClientMacAddr].type = thisClient.type;
@@ -198,33 +206,25 @@ function genClientList(){
 			clientList[thisClientMacAddr].vendor = thisClient.vendor;
 			clientList[thisClientMacAddr].rssi = parseInt(thisClient.rssi);
 			clientList[thisClientMacAddr].isWL = parseInt(thisClient.isWL);
-			if(clientList[thisClientMacAddr].isWL > 0) {
-				totalClientNum.wireless += clientList[thisClientMacAddr].macRepeat;
-				totalClientNum.wireless_ifnames[clientList[thisClientMacAddr].isWL-1] += clientList[thisClientMacAddr].macRepeat;
-			}
-			else {
-				totalClientNum.wired += clientList[thisClientMacAddr].macRepeat;
+			if(amesh_support && isSupport("dualband") && clientList[thisClientMacAddr].isWL == 3)
+				clientList[thisClientMacAddr].isWL = 2;
+			if(clientList[thisClientMacAddr].isOnline) {
+				if(clientList[thisClientMacAddr].isWL > 0) {
+					totalClientNum.wireless += clientList[thisClientMacAddr].macRepeat;
+					totalClientNum.wireless_ifnames[clientList[thisClientMacAddr].isWL-1] += clientList[thisClientMacAddr].macRepeat;
+				}
+				else {
+					totalClientNum.wired += clientList[thisClientMacAddr].macRepeat;
+				}
 			}
 
 			clientList[thisClientMacAddr].opMode = parseInt(thisClient.opMode); //0:unknow, 1: router, 2: repeater, 3: AP, 4: Media Bridge
-			if(clientList[thisClientMacAddr].opMode == 2 && !downsize_4m_support) {
-				clientList[thisClientMacAddr].type = "24";
-				clientList[thisClientMacAddr].defaultType = "24";
-			}
-
 			clientList[thisClientMacAddr].isLogin = (thisClient.isLogin == "1");
-
-			clientList[thisClientMacAddr].isOnline = true;
-			totalClientNum.online++;
-
 			clientList[thisClientMacAddr].group = thisClient.group;
 			clientList[thisClientMacAddr].callback = thisClient.callback;
 			clientList[thisClientMacAddr].keeparp = thisClient.keeparp;
-
 			clientList[thisClientMacAddr].ipMethod = thisClient.ipMethod;
-
 			clientList[thisClientMacAddr].qosLevel = thisClient.qosLevel;
-
 			clientList[thisClientMacAddr].wtfast = parseInt(thisClient.wtfast);
 			clientList[thisClientMacAddr].internetMode = thisClient.internetMode;
 			clientList[thisClientMacAddr].internetState = thisClient.internetState;
@@ -237,7 +237,7 @@ function genClientList(){
 			if(amesh_support) {
 				if(thisClient.amesh_isRe != undefined) {
 					clientList[thisClientMacAddr].amesh_isRe = (thisClient.amesh_isRe == "1") ? true : false;
-					if(clientList[thisClientMacAddr].amesh_isRe) { // re set amesh re device to offline
+					if(clientList[thisClientMacAddr].amesh_isRe && clientList[thisClientMacAddr].isOnline) { // re set amesh re device to offline
 						clientList[thisClientMacAddr].isOnline = false;
 						totalClientNum.online--;
 						if(clientList[thisClientMacAddr].isWL > 0) {
@@ -247,14 +247,20 @@ function genClientList(){
 						else {
 							totalClientNum.wired -= clientList[thisClientMacAddr].macRepeat;
 						}
+						if(AiMeshTotalClientNum[thisClientMacAddr] == undefined)
+							AiMeshTotalClientNum[thisClientMacAddr] = 0;
 					}
 				}
-				
-				if(thisClient.amesh_isReClient != undefined) {
-					if(thisClient.amesh_papMac != undefined) {
-						if(clientList[thisClient.amesh_papMac] != undefined)
-							clientList[thisClientMacAddr].amesh_isReClient = (thisClient.amesh_isReClient == "1") ? true : false;
-							clientList[thisClientMacAddr].amesh_papMac = thisClient.amesh_papMac;
+
+				if(thisClient.amesh_isReClient != undefined && thisClient.amesh_papMac != undefined) {
+					clientList[thisClientMacAddr].amesh_isReClient = (thisClient.amesh_isReClient == "1") ? true : false;
+					clientList[thisClientMacAddr].amesh_papMac = thisClient.amesh_papMac;
+
+					if(clientList[thisClientMacAddr].isOnline) {
+						if(AiMeshTotalClientNum[thisClient.amesh_papMac] == undefined)
+							AiMeshTotalClientNum[thisClient.amesh_papMac] = 1;
+						else
+							AiMeshTotalClientNum[thisClient.amesh_papMac] = AiMeshTotalClientNum[thisClient.amesh_papMac] + 1;
 					}
 				}
 			}
@@ -282,7 +288,7 @@ function genClientList(){
 
 				clientList.push(thisClientMacAddr);
 				clientList[thisClientMacAddr] = new setClientAttr();
-				clientList[thisClientMacAddr].from = "nmpClient";
+				clientList[thisClientMacAddr].from = thisClient.from;
 				if(!downsize_4m_support) {
 					clientList[thisClientMacAddr].type = thisClientType;
 					clientList[thisClientMacAddr].defaultType = thisClientDefaultType;
@@ -296,7 +302,7 @@ function genClientList(){
 				nmpCount++;
 			}
 			else if(!clientList[thisClientMacAddr].isOnline) {
-				clientList[thisClientMacAddr].from = "nmpClient";
+				clientList[thisClientMacAddr].from = thisClient.from;
 				nmpCount++;
 			}
 		}
@@ -316,7 +322,7 @@ function getUploadIcon(clientMac) {
 			setTimeout("getUploadIcon('" + clientMac + "');", 1000);
 		},
 		success: function(response){
-			result = upload_icon;
+			result = htmlEnDeCode.htmlEncode(upload_icon);
 		}
 	});
 	return result
@@ -581,10 +587,14 @@ function popClientListEditTable(event) {
 	//build device icon list start
 	var clientListIconArray = [["Windows device", "1"], ["Router", "2"], ["NAS/Server", "4"], ["IP Cam", "5"], ["Macbook", "6"], ["Game Console", "7"], ["Android Phone", "9"], ["iPhone", "10"], 
 	["Apple TV", "11"], ["Set-top Box", "12"], ["iMac", "14"], ["ROG", "15"], ["Printer", "18"], ["Windows Phone", "19"], ["Android Tablet", "20"], ["iPad", "21"], ["Linux Device", "22"], 
-	["Smart TV", "23"], ["Repeater", "24"], ["Kindle", "25"], ["Scanner", "26"], ["Chromecast", "27"], ["ASUS smartphone", "28"], ["ASUS Pad", "29"], ["Windows", "30"], ["Android", "31"], ["Mac OS", "32"]];
+	["Smart TV", "23"], ["Repeater", "24"], ["Kindle", "25"], ["Scanner", "26"], ["Chromecast", "27"], ["ASUS smartphone", "28"], ["ASUS Pad", "29"], ["Windows", "30"], ["Android", "31"], ["Mac OS", "32"],
+	["Windows laptop", "35"]];
 
 	var eachColCount = 7;
-	var colCount = parseInt(clientListIconArray.length / eachColCount) + 1;
+	var colCount = parseInt(clientListIconArray.length / eachColCount);
+	if(usericon_support)
+		colCount++;
+
 	for(var rowIndex = 0; rowIndex < colCount; rowIndex += 1) {
 		var row = document.getElementById("tbCardClientListIcon").insertRow(rowIndex);
 		row.id = "trCardClientListIcon" + rowIndex;
@@ -602,6 +612,7 @@ function popClientListEditTable(event) {
 						cell.className = "client_icon_list_td";
 						cell.innerHTML = '<div id="divCardUserIcon" class="client_upload_div" style="display:none;">+' +
 						'<input type="file" name="cardUploadIcon" id="cardUploadIcon" class="client_upload_file" onchange="previewCardUploadIcon(this);" title="Upload client icon" /></div>';/*untranslated*/
+						break;
 					}
 				}
 			}
@@ -2240,7 +2251,8 @@ function updateClientListView(){
 				if((isJsonChanged(originData, originDataTmp) || originData.fromNetworkmapd == "") && !edit_client_name_flag && !slideFlag){
 					create_clientlist_listview();
 					sorterClientList();
-					parent.show_client_status(totalClientNum.online);
+					if(parent.show_client_status != undefined)
+						parent.show_client_status(totalClientNum.online);
 				}
 				setTimeout("updateClientListView();", 3000);	
 			}

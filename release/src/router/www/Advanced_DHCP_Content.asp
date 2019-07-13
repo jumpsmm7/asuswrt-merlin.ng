@@ -115,8 +115,8 @@ var sortCol, sortMethod;
 
 function initial(){
 	show_menu();
-	//id="faq" href="https://www.asus.com/US/support/FAQ/1000906"
-	httpApi.faqURL("faq", "1000906", "https://www.asus.com", "/support/FAQ/");
+	//id="faq" href="https://www.asus.com/US/support/FAQ/1036677"
+	httpApi.faqURL("1036677", function(url){document.getElementById("faq").href=url;});
 	//Viz 2011.10{ for LAN ip in DHCP pool or Static list
 	showtext(document.getElementById("LANIP"), '<% nvram_get("lan_ipaddr"); %>');
 	if((inet_network(document.form.lan_ipaddr.value)>=inet_network(document.form.dhcp_start.value))&&(inet_network(document.form.lan_ipaddr.value)<=inet_network(document.form.dhcp_end.value))){
@@ -224,7 +224,7 @@ function addRow_Group(upper){
 		document.form.dhcp_staticname_x_0.focus();
 		document.form.dhcp_staticname_x_0.select();
 		return false;
-	}else if(check_macaddr(document.form.dhcp_staticmac_x_0, check_hwaddr_flag(document.form.dhcp_staticmac_x_0)) == true &&
+	}else if(check_macaddr(document.form.dhcp_staticmac_x_0, check_hwaddr_flag(document.form.dhcp_staticmac_x_0, 'inner')) == true &&
 		 validator.validIPForm(document.form.dhcp_staticip_x_0,0) == true &&
 		 validate_dhcp_range(document.form.dhcp_staticip_x_0) == true){
 
@@ -404,7 +404,8 @@ function showdhcp_staticlist(){
 //				if (j !=3) code += '<td width="28%"></td>';
 			code += '<td width="16%"><input class="edit_btn" onclick="edit_Row(this);" value=""/>';
 			code += '<input class="remove_btn" onclick="del_Row(this);" value=""/></td></tr>';
-			clientListEventData.push({"mac" : clientMac, "name" : clientName, "ip" : clientIP, "callBack" : "DHCP"});
+			if(validator.mac_addr(clientMac))
+				clientListEventData.push({"mac" : clientMac, "name" : clientName, "ip" : clientIP, "callBack" : "DHCP"});
 		}
 	}
 	code += '</table>';
@@ -490,7 +491,7 @@ function applyRule(){
 			}
 		}
 
-		if(based_modelid == "MAP-AC1300" || based_modelid == "MAP-AC2200" || based_modelid == "VZW-AC1300" || based_modelid == "MAP-AC1750")
+		if(based_modelid == "MAP-AC1300" || based_modelid == "MAP-AC2200" || based_modelid == "VZW-AC1300" || based_modelid == "MAP-AC1750" || based_modelid == "RT-AC92U")
 			alert("By applying new LAN settings, please reboot all Lyras connected to main Lyra manually.");
 
 		if(amesh_support && isSwMode("rt")) {

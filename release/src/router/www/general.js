@@ -860,8 +860,9 @@ function insertExtChannelOption_5g(){
 						wl_channel_list_5g = filter_5g_channel_by_bw(wl_channel_list_5g, 40);
 					}
 					// for V80, V80+80, if not all 4 continuous channels exist, remove them.
-					if( (vht80_80_support && (document.form.wl_bw.value == "3" || document.form.wl_bw.value == "4") && (Rawifi_support || Qcawifi_support))
-					 || (band5g_11ac_support && document.form.wl_bw.value == "3" && Rtkwifi_support)){
+					if ((vht80_80_support && (document.form.wl_bw.value == "3" || document.form.wl_bw.value == "4") && (Rawifi_support || Qcawifi_support))
+					|| (band5g_11ac_support && document.form.wl_bw.value == "3" && Rtkwifi_support)
+					|| (band5g_11ax_support || band5g_11ac_support) && (document.form.wl_bw.value == "3") && Qcawifi_support) {
 						wl_channel_list_5g = filter_5g_channel_by_bw(wl_channel_list_5g, 80);
 					}
 					// For V160, if not all 8 continuous channels exist, remove them.
@@ -1460,19 +1461,20 @@ function showhide(element, sh)
 	}
 }
 
-function check_hwaddr_flag(obj){  //check_hwaddr() remove alert()
+function check_hwaddr_flag(obj, flag){  //check_hwaddr() remove alert()
 	if(obj.value == ""){
 			return 0;
 	}else{
 		var hwaddr = new RegExp("(([a-fA-F0-9]{2}(\:|$)){6})", "gi");
-		//var legal_hwaddr = new RegExp("(^([a-fA-F0-9][aAcCeE02468])(\:))", "gi"); // for legal MAC, unicast & globally unique (OUI enforced)
-
-		if(!hwaddr.test(obj.value))
-    		return 1;
-  		/*else if(!legal_hwaddr.test(obj.value))
-    		return 2;*/
-		else
-			 return 0;
+		var legal_hwaddr = new RegExp("(^([a-fA-F0-9][cC048])(\:))", "gi"); // for legal MAC, unicast & globally unique (OUI enforced)
+		if(!hwaddr.test(obj.value)){
+			return 1;
+		}
+  	else if(flag != 'inner' && !legal_hwaddr.test(obj.value)){
+			return 2;
+		}
+				
+		return 0;
   }
 }
 

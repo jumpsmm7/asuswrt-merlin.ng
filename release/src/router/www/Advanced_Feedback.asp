@@ -46,6 +46,7 @@ var fb_trans_id = '<% generate_trans_id(); %>';
 var default_provider = '<% get_parameter("provider"); %>';
 var reload_data = parseInt('<% get_parameter("reload"); %>');
 var dblog_trans_id = '<% generate_trans_id(); %>';
+var fb_total_size;
 function initial(){
 	show_menu();
 	if(dsl_support){
@@ -79,7 +80,8 @@ function initial(){
 		document.getElementById("attach_modem_span").style.display = "none";
 	}
 
-	setTimeout("check_wan_state();", 300);
+	//Renjie: do not check WAN connection
+	//setTimeout("check_wan_state();", 300);
 
 	if(dblog_support)
 		init_diag_feature();
@@ -97,11 +99,11 @@ function initial(){
 	change_fb_email_provider();
 
 	if(reload_data==1){
-		document.form.fb_country.value = '<% nvram_get("fb_country"); %>';
-		document.form.fb_ptype.value = '<% nvram_get("fb_ptype"); %>';
+		document.form.fb_country.value = decodeURIComponent('<% nvram_char_to_ascii("", "fb_country"); %>');
+		document.form.fb_ptype.value = decodeURIComponent('<% nvram_char_to_ascii("", "fb_ptype"); %>');
 		Reload_pdesc(document.form.fb_ptype);
-		document.form.fb_pdesc.value = '<% nvram_get("fb_pdesc"); %>';
-		document.form.fb_comment.value = '<% nvram_get("fb_comment"); %>';
+		document.form.fb_pdesc.value = decodeURIComponent('<% nvram_char_to_ascii("", "fb_pdesc"); %>');
+		document.form.fb_comment.value = decodeURIComponent('<% nvram_char_to_ascii("", "fb_comment"); %>');
 	}
 
 	$("#oauth_google_btn").click(
@@ -109,7 +111,6 @@ function initial(){
 			oauth.google(onGoogleLogin);
 		}
 	);
-
 
 	httpApi.nvramGetAsync({
 		data: ["preferred_lang"],
@@ -137,7 +138,6 @@ function initial(){
 			})
 		}
 	})
-
 }
 
 function check_wan_state(){
@@ -146,6 +146,7 @@ function check_wan_state(){
 		document.getElementById("fb_desc_disconnect").style.display = "";
 		document.form.fb_country.disabled = "true";
 		document.form.fb_email.disabled = "true";
+		document.form.fb_serviceno.disabled = "true";
 		document.form.attach_syslog.disabled = "true";
 		document.form.attach_cfgfile.disabled = "true";
 		document.form.attach_modemlog.disabled = "true";
@@ -171,6 +172,7 @@ function check_wan_state(){
 		document.getElementById("fb_desc_disconnect").style.display = "none";
 		document.form.fb_country.disabled = "";
 		document.form.fb_email.disabled = "";
+		document.form.fb_serviceno.disabled = "";
 		document.form.attach_syslog.disabled = "";
 		document.form.attach_modemlog.disabled = "";
 		document.form.attach_wlanlog.disabled = "";
@@ -374,13 +376,6 @@ function applyRule(){
 		return false;
 	}
 
-	//WAN connected check
-	if(sw_mode != 3 && document.getElementById("connect_status").className == "connectstatusoff"){
-                alert("<#USB_Application_No_Internet#>");
-                return false;
-        }
-	else{
-
 		/*if(document.form.feedbackresponse.value == "3"){
 				alert("Feedback report daily maximum(10) send limit reached.");
 				return false;
@@ -429,8 +424,13 @@ function applyRule(){
 
 		//check Diagnostic
 		if(dblog_support) {
+			document.form.dblog_tousb.disabled = true;
+			document.form.dblog_service.disabled = true;
+			document.form.dblog_duration.disabled = true;
+			document.form.dblog_transid.disabled = true;
+			var dblog_enable_status = httpApi.nvramGet(["dblog_enable"], true).dblog_enable;
 			var dblog_enable = getRadioValue($('form[name="form"]').children().find('input[name=dblog_enable]'));
-			if(dblog_enable == "1") {
+			if(dblog_enable_status == "0" && dblog_enable == "1") {
 				var service_list_checked = $("input:checkbox[name=dblog_service_list]:checked").map(function() {
 					return $(this).val();
 				}).get();
@@ -460,13 +460,10 @@ function applyRule(){
 				if(dblog_trans_id != "")
 					document.form.dblog_transid.value = dblog_trans_id;
 			}
-			else {
-				document.form.dblog_tousb.disabled = true;
-				document.form.dblog_service.disabled = true;
-				document.form.dblog_duration.disabled = true;
-				document.form.dblog_transid.disabled = true;
-			}
 		}
+
+		if(document.form.PM_attach_wlanlog.value == "1")
+			httpApi.update_wlanlog();
 
 		document.form.fb_browserInfo.value = navigator.userAgent;
 		if(dsl_support){
@@ -476,10 +473,10 @@ function applyRule(){
 			}else	
 				showLoading(60);
 		}
-		else
-			showLoading(60);
+		else{
+			startLogPrep();
+		}
 		document.form.submit();
-	}
 }
 
 function isEmail(strE) {
@@ -504,7 +501,7 @@ function change_dsl_diag_enable(value) {
 			return;
 		}
 		else{
-			alert("While debug log capture in progress, please do not unplug the USB disk as the debug log would be stored in the disk. UI top right globe icon flashing in yellow indicating that debug log capture in progress. Click on the yellow globe icon could cancel the debug log capture. Please note that xDSL line would resync in one minute after Feedback form submitted.");/*untranslated*/
+			alert("<#feedback_capturing_note1#> <#feedback_capturing_note_DSL#>");
 		}
 		showhide("dslx_diag_duration",1);
 	}
@@ -514,14 +511,14 @@ function change_dsl_diag_enable(value) {
 }
 function init_diag_feature() {
 	var dblog_enable = '<% nvram_get("dblog_enable"); %>';
+	var dblog_remaining = parseInt('<% nvram_get("dblog_remaining"); %>');
 	setRadioValue($('form[name="form"]').children().find('input[name=dblog_enable]'), dblog_enable);
 
-	if(dblog_enable == "1") {
+	if(dblog_enable == "1" && dblog_remaining > 0) {
 		$(".dblog_disabled_status").find("input, textarea, button, select").attr("disabled", true);
 		$(".dblog_disabled_status").css("display", "none");
 		$(".dblog_enabled_status").css("display", "inline");
 
-		var dblog_remaining = parseInt('<% nvram_get("dblog_remaining"); %>');
 		var transformTime = function(_sec) {
 			var days = Math.floor(dblog_remaining / 60 / 60 / 24);
 			var hours = Math.floor(dblog_remaining / 60 / 60 % 24);
@@ -530,7 +527,7 @@ function init_diag_feature() {
 			var remaining_time_str = "<#mssid_time_remaining#> : ";
 
 			if(dblog_remaining == 0) {
-				remaining_time_str += "0" + " " + "(Prepare data...)";/* untranslated */
+				remaining_time_str += "0" + " " + "(Prepare data...)";	//Untranslated
 				return remaining_time_str;
 			}
 
@@ -805,6 +802,39 @@ function change_fb_email_provider(obj){
 		document.form.fb_email.readOnly = false;
 	}
 }
+
+function startLogPrep(){
+	disableCheckChangedStatus();
+	dr_advise();
+}
+
+var redirect_info = 0;
+var showLoading_sec;
+function CheckFBSize(){
+	$.ajax({
+		url: '/ajax_fb_size.asp',
+		dataType: 'script',
+		timeout: 1500,
+		error: function(xhr){
+				redirect_info++;
+				if(redirect_info < 10){
+					setTimeout("CheckFBSize();", 1000);
+				}
+				else{
+					showLoading(35);
+					setTimeout("redirect()", 35000);
+				}
+		},
+		success: function(){
+				showLoading_sec = Number(fb_total_size)/1024/1024/8;	/* 1MB for 1min */
+				showLoading_sec = showLoading_sec.toFixed(1);
+				showLoading_sec = showLoading_sec>1? showLoading_sec:1;
+				showLoading_sec = showLoading_sec*60;   //min -> sec
+				showLoading(showLoading_sec);
+				setTimeout("redirect()", showLoading_sec*1000);
+		}
+	});
+}
 </script>
 </head>
 <body onload="initial();" onunLoad="return unload_body();">
@@ -813,12 +843,10 @@ function change_fb_email_provider(obj){
 <table cellpadding="5" cellspacing="0" id="dr_sweet_advise" class="dr_sweet_advise" align="center">
 <tr>
 <td>
-<div class="drword" id="drword" style="height:110px;"><#Main_alert_proceeding_desc4#> <#Main_alert_proceeding_desc1#>...
+<div class="drword" id="drword" style="height:110px;"><#Main_alert_proceeding_desc4#> <#QKSet_detect_waitdesc1#>...
 <br/>
 <br/>
 </div>
-<div class="drImg"><img src="/images/alertImg.png"></div>
-<div style="height:70px;"></div>
 </td>
 </tr>
 </table>
@@ -894,7 +922,7 @@ function change_fb_email_provider(obj){
 </td>
 </tr>
 <tr>
-	<th>Provider</th>
+	<th><#Provider#></th>
 	<td>
 		<select class="input_option" name="fb_email_provider" onChange="change_fb_email_provider(this);">
 			<option value="">ASUS</option>
@@ -915,6 +943,13 @@ function change_fb_email_provider(obj){
 </tr>
 
 <tr>
+<th>ASUS Service No./Case#</th>
+<td>
+	<input type="text" name="fb_serviceno" maxlength="50" class="input_25_table" value="" autocorrect="off" autocapitalize="off">
+</td>
+</tr>
+
+<tr>
 <th><#feedback_extra_info#> *</th>
 <td>
 	<input type="checkbox" class="input" name="attach_syslog" id="attach_syslog_id"><label for="attach_syslog_id"><#System_Log#></label>&nbsp;&nbsp;&nbsp;
@@ -926,18 +961,18 @@ function change_fb_email_provider(obj){
 </tr>
 
 <tr>
-	<th><a class="hintstyle" href="javascript:void(0);" onClick="openHint(25,11);">Enable DSL Line Diagnostic *</a></th>
+	<th><a class="hintstyle" href="javascript:void(0);" onClick="openHint(25,11);"><#feedback_debug_log_DSL#> *</a></th>
 	<td>
 		<input type="radio" name="dslx_diag_enable" class="input" value="1" onclick="change_dsl_diag_enable(1);"><#checkbox_Yes#>
 		<input type="radio" name="dslx_diag_enable" class="input" value="0" onclick="change_dsl_diag_enable(0);" checked><#checkbox_No#>
 		<br>	
-		<span id="storage_ready" style="display:none;color:#FC0">* USB disk is ready.</span>
+		<span id="storage_ready" style="display:none;color:#FC0">* <#USB_ready#></span>
 		<span id="be_lack_storage" style="display:none;color:#FC0">* <#no_usb_found#></span>
 	</td>
 </tr>
 
 <tr id="dslx_diag_duration">
-	<th>Diagnostic debug log capture duration *</th>
+	<th><#feedback_capturing_duration#> *</th>
 	<td>
 		<select id="" class="input_option" name="dslx_diag_duration">
 			<option value="0" selected><#Auto#></option>

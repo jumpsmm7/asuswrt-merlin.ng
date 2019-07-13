@@ -131,6 +131,7 @@
 	display: none;
 	border-radius: 10px;
 }
+
 .shadow_m{
 	margin-top: -9px;
 }
@@ -157,8 +158,8 @@ var safe_count = 0;
 
 function initial(){
 	show_menu();
-	//	http://www.asus.com/support/FAQ/1008719/
-	httpApi.faqURL("faq", "1008719", "https://www.asus.com", "/support/FAQ/");
+	//	https://www.asus.com/support/FAQ/1008719/
+	httpApi.faqURL("1008719", function(url){document.getElementById("faq").href=url;});
 	if(lyra_hide_support){
 		$("#scenario_tr").css({"visibility":"hidden"});
 		$("#scenario_img").attr({"height":"0"});
@@ -166,10 +167,11 @@ function initial(){
 		$(".AiProtection_02").hide();
 		$(".AiProtection_03").hide();
 		$(".line_1").hide();
-		if(!uiSupport("dpi_vp")){
+		if(!isSupport("dpi_vp")){
 			$("#twoWayIPS_padding").hide();
 			$("#twoWayIPS_field").hide();
 		}
+		$("#tm_logo").css("margin-left", "10px");
 	}
 
 	if(document.form.wrs_protect_enable.value == '1'){
@@ -184,6 +186,9 @@ function initial(){
 	check_weakness();
 
 	$("#all_security_btn").hide();
+
+	if(!ASUS_EULA.status("tm"))
+		ASUS_EULA.config(eula_confirm, cancel);
 }
 
 function getEventTime(){
@@ -273,19 +278,17 @@ function applyRule(){
 		}
 	}
 
-	if(reset_wan_to_fo(document.form, document.form.wrs_protect_enable.value)) {
-		showLoading();
-		document.form.submit();
+	/* when qca_sfe = 1, avoid fast-classifier can't be disabled in run-time */
+	if (based_modelid == "MAP-AC1750") {
+		document.form.action_script.value = "reboot";
+		document.form.action_wait.value = "<% nvram_get("reboot_time"); %>";
 	}
-	else {
-		curState = 0;
-		document.form.wrs_protect_enable.value = "0";
-		$('#radio_protection_enable').find('.iphone_switch').animate({backgroundPosition: -37}, "slow");
-		shadeHandle('0');
-		if($('#agreement_panel').css('display') == "block") {
-			refreshpage();
-		}
-	}
+
+	if(reset_wan_to_fo.change_status)
+		reset_wan_to_fo.change_wan_mode(document.form);
+
+	showLoading();
+	document.form.submit();
 }
 
 function showWeaknessTable(){
@@ -783,6 +786,24 @@ function eula_confirm(){
 	document.form.action_wait.value = "15";
 	applyRule();
 }
+function switch_control(_status){
+	if(_status) {
+		if(reset_wan_to_fo.check_status()) {
+			if(ASUS_EULA.check("tm")){
+				document.form.wrs_protect_enable.value = "1";
+				shadeHandle("1");
+				applyRule();
+			}
+		}
+		else
+			cancel();
+	}
+	else {
+		document.form.wrs_protect_enable.value = "0";
+		shadeHandle("0");
+		applyRule();
+	}
+}
 
 function show_alert_preference(){
 	cal_panel_block("alert_preference", 0.25);
@@ -815,6 +836,12 @@ function apply_alert_preference(){
 
 	if(address_temp == "") {
 		alert("Please input the mail account!");
+		return;
+	}
+
+	if(address_temp.indexOf("`")!=-1){
+		alert("` "+ " <#JS_validchar#>");
+		document.getElementById('mail_address').focus();
 		return;
 	}
 
@@ -1176,7 +1203,7 @@ function shadeHandle(flag){
 																</div>
 															</td>
 															<td>
-																<div style="width:100px;height:48px;margin-left:-40px;background-image:url('images/New_ui/tm_logo.png');"></div>
+																<div id="tm_logo" style="width:100px;height:48px;margin-left:-40px;background-image:url('images/New_ui/tm_logo.png');"></div>
 															</td>
 														</tr>
 														<tr id="scenario_tr">
@@ -1194,25 +1221,17 @@ function shadeHandle(flag){
 									<div style="margin:10px;">
 										<table width="100%" border="1" align="center" cellpadding="4" cellspacing="0" bordercolor="#6b8fa3"  class="FormTable">
 											<tr>
-												<th><#CTL_Enabled#> <#AiProtection_title#></th>
+												<th><#AiProtection_title#></th>
 												<td>
 													<div align="center" class="left" style="width:94px; float:left; cursor:pointer;" id="radio_protection_enable"></div>
 													<div class="iphone_switch_container" style="height:32px; width:74px; position: relative; overflow: hidden">
 														<script type="text/javascript">
 															$('#radio_protection_enable').iphoneSwitch('<% nvram_get("wrs_protect_enable"); %>',
 																function(){
-																	ASUS_EULA.config(eula_confirm, cancel);
-
-																	if(ASUS_EULA.check("tm")){
-																		document.form.wrs_protect_enable.value = "1";
-																		shadeHandle("1");
-																		applyRule();
-																	}
+																	switch_control(1);
 																},
 																function(){
-																	document.form.wrs_protect_enable.value = "0";
-																	shadeHandle("0");
-																	applyRule();
+																	switch_control(0);
 																}
 															);
 														</script>

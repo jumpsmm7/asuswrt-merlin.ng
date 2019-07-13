@@ -1667,9 +1667,53 @@ void ether_led()
 }
 
 #ifdef HND_ROUTER
+
+void init_switch_pre()
+{
+#if defined(GTAC5300)
+	// clean the egress port first to avoid the 2nd WAN's DHCP.
+	system("ethswctl -c regaccess -l 4 -v 0x3102 -d 0x60");
+	system("ethswctl -c regaccess -l 4 -v 0x3100 -d 0x50");
+	system("ethswctl -c regaccess -l 4 -v 0x3106 -d 0x140");
+	system("ethswctl -c regaccess -l 4 -v 0x3104 -d 0x60");
+	system("ethswctl -c regaccess -l 4 -v 0x310e -d 0x140");
+#elif defined(RTAC86U) || defined(GTAC2900)
+	// clean the egress port first to avoid the 2nd WAN's DHCP.
+	system("ethswctl -c regaccess -l 4 -v 0x3106 -d 0x1c0");
+	system("ethswctl -c regaccess -l 4 -v 0x3104 -d 0xe0");
+	system("ethswctl -c regaccess -l 4 -v 0x3102 -d 0xe0");
+	system("ethswctl -c regaccess -l 4 -v 0x3100 -d 0xd0");
+#endif
+
+	system("ethctl eth0 ethernet@wirespeed enable");
+	system("ethctl eth1 ethernet@wirespeed enable");
+	system("ethctl eth2 ethernet@wirespeed enable");
+	system("ethctl eth3 ethernet@wirespeed enable");
+	system("ethctl eth4 ethernet@wirespeed enable");
+#ifdef RTCONFIG_EXT_BCM53134
+	system("ethctl eth5 ethernet@wirespeed enable");
+	system("ethswctl -c pmdioaccess -x 0x1030 -l 2 -d 0xf017");
+	system("ethswctl -c pmdioaccess -x 0x1130 -l 2 -d 0xf017");
+	system("ethswctl -c pmdioaccess -x 0x1230 -l 2 -d 0xf017");
+	system("ethswctl -c pmdioaccess -x 0x1330 -l 2 -d 0xf017");
+#endif
+
+	system("ethswctl -c wan -o enable -i eth0");
+	system("tmctl porttminit --devtype 0 --if eth0 --flag 1");
+	system("tmctl porttminit --devtype 0 --if eth1 --flag 1");
+	system("tmctl porttminit --devtype 0 --if eth2 --flag 1");
+	system("tmctl porttminit --devtype 0 --if eth3 --flag 1");
+	system("tmctl porttminit --devtype 0 --if eth4 --flag 1");
+#ifdef RTCONFIG_EXT_BCM53134
+	system("tmctl porttminit --devtype 0 --if eth5 --flag 1");
+#endif
+}
+
 void init_switch()
 {
 	int model = get_model();
+
+	init_switch_pre();
 
 	switch(model) {
 		case MODEL_GTAC5300:
@@ -1848,6 +1892,9 @@ void init_switch()
 	// ctf should be disabled when some functions are enabled
 	if ((nvram_get_int("qos_enable") == 1 && nvram_get_int("qos_type") == 0) ||
 	    (check_wl_guest_bw_enable()  || (nvram_get_int("qos_enable") && nvram_get_int("qos_type") == 2)) ||
+#if defined(RTCONFIG_AMAS) && defined(RTCONFIG_BCM_7114)
+	(sw_mode() == SW_MODE_AP && nvram_match("re_mode", "1")) ||
+#endif
 	    nvram_get_int("ctf_disable_force")
 #ifndef RTCONFIG_BCMARM
 	|| sw_mode() == SW_MODE_REPEATER
@@ -1944,7 +1991,13 @@ void init_switch()
 	eval("insmod", "igs");
 #endif
 
+#if defined(RTCONFIG_BCMWL6) && defined(RTCONFIG_PROXYSTA) && (defined(RTAC68U) || defined(RTAC56U) || defined(RTAC56S) || defined(RTN18U) || defined(DSL_AC68U) || defined(RT4GAC68U))
+	char psta[8];
+	snprintf(psta, sizeof(psta), "psta=%d", (psta_exist() || psr_exist()));
+	eval("insmod", "et", psta);
+#else
 	eval("insmod", "et");
+#endif
 	eval("insmod", "bcm57xx");
 
 	enable_jumbo_frame();
@@ -2078,7 +2131,6 @@ reset_mssid_hwaddr(int unit)
 			case MODEL_RTAC56S:
 			case MODEL_RTAC56U:
 			case MODEL_RTAC5300:
-			case MODEL_GTAC5300:
 			case MODEL_RTAC88U:
 			case MODEL_RTAC86U:
 			case MODEL_RTAC3100:
@@ -2088,6 +2140,9 @@ reset_mssid_hwaddr(int unit)
 				else
 #endif
 				snprintf(macaddr_str, sizeof(macaddr_str), "%d:macaddr", unit);
+				break;
+			case MODEL_GTAC5300:
+				snprintf(macaddr_str, sizeof(macaddr_str), "%d:macaddr", unit + 1);
 				break;
 			case MODEL_RTAC1200G:
 			case MODEL_RTAC1200GP:
@@ -2143,7 +2198,7 @@ reset_mssid_hwaddr(int unit)
 
 #ifdef RTCONFIG_PSR_GUEST
 			snprintf(prefix, sizeof(prefix), "wl%d_", unit);
-			if (is_psr(unit) && nvram_match(strcat_r(prefix, "psr_guest", tmp), "1")) {
+			if (is_psr(unit) && nvram_match(strcat_r(prefix, "psr_mbss", tmp), "1")) {
 				max_mssid++;
 				macvalue--;
 				macvalue_local--;
@@ -2162,7 +2217,11 @@ reset_mssid_hwaddr(int unit)
 #endif
 				if ((subunit > max_mssid)
 #if defined(RTCONFIG_BCMWL6) && defined(RTCONFIG_PROXYSTA)
-					|| (is_psr(unit) && (subunit > 1))
+					|| (is_psr(unit) &&
+#ifdef RTCONFIG_PSR_GUEST
+						!nvram_match(strcat_r(prefix, "psr_guest", tmp), "1") &&
+#endif
+						(subunit > 1))
 #endif
 				)
 					macp = (unsigned char*) &macvalue_local;
@@ -2248,23 +2307,43 @@ void load_wl()
 #endif
 #endif
 	int i = 0, maxunit = -1;
-	int unit = -1;
+	int unit;
 	char ifname[16] = {0};
 	char instance_base[128];
+#if defined(HND_ROUTER) && !defined(RTCONFIG_HND_ROUTER_AX)
+	char word[100], tmp[100], prefix[] = "wlXXXXXXXXXX_";
+	int dhd_chk_cnt = nvram_get_int("dhd_chk_cnt");
+	if (dhd_chk_cnt < 5) {
+		nvram_set_int("dhd_chk_cnt", ++dhd_chk_cnt);
 
-#ifdef RTCONFIG_BCM_7114
-	int dhd_reboot = 0;
-	if (!*nvram_safe_get("chipnum") || !*nvram_safe_get("chiprev"))
-		dhd_reboot = 1;
+		if (nvram_get_int("dhd_chk_cnt") == 5) {
+			dbg("workaround broken bcm4366...\n");
+			unit = 0;
+			foreach (word, nvram_safe_get("wl_ifnames"), next) {
+				snprintf(prefix, sizeof(prefix), "wl%d_", unit++);
+				nvram_set_int(strcat_r(prefix, "failed", tmp), 3);
+			}
+		}
+
+		nvram_commit();
+	}
+
+	dbg("dhd_chk_cnt: %d\n",  nvram_get_int("dhd_chk_cnt"));
 #endif
 
-
 	foreach(module, modules, next) {
+#ifdef RTCONFIG_BCM_7114
+		if (strcmp(module, "dhd") == 0 && nvram_get_int("dhd24"))
+			continue;
+		else if (strcmp(module, "dhd24") == 0 && nvram_get_int("dhd24"))
+			eval("rmmod", "dhd");
+#endif
 		if (strcmp(module, "dhd") == 0 || strcmp(module, "dhd24") == 0) {
 			/* Search for existing wl devices and the max unit number used */
 			for (i = 1; i <= DEV_NUMIFS; i++) {
 			snprintf(ifname, sizeof(ifname), "eth%d", i);
 				if (!wl_probe(ifname)) {
+					unit = -1;
 					if (!wl_ioctl(ifname, WLC_GET_INSTANCE, &unit, sizeof(unit))) {
 						maxunit = (unit > maxunit) ? unit : maxunit;
 					}
@@ -2280,21 +2359,15 @@ void load_wl()
 			eval("insmod", module);
 		}
 	}
-#ifdef RTCONFIG_BCM_7114
-	if (dhd_reboot) {
-		for(i=0; i< 3; ++i) {
-			if (nvram_match("chipnum","0x4366") && *nvram_safe_get("chiprev")) {
-					_dprintf("\nrebooting(dhd)...\n");
-					reboot(RB_AUTOBOOT);
-			}
-			sleep(1);
-		}
-	}
-#endif
 
 #ifdef WLCLMLOAD
 	download_clmblob_files();
 #endif /* WLCLMLOAD */
+
+#if defined(HND_ROUTER) && !defined(RTCONFIG_HND_ROUTER_AX)
+        nvram_set_int("dhd_chk_cnt", 0);
+        nvram_commit();
+#endif
 }
 #endif
 
@@ -2478,8 +2551,10 @@ void fini_wl(void)
 {
 	int model = get_model();
 
-#if (defined(RTAC3200) || defined(HND_ROUTER) || defined(RTCONFIG_BCM9)/* || defined(RTCONFIG_BCM_7114)*/)
-	return;
+	/* no wireless driver re-loading to keep CAC information when restarting wireless */
+#if defined(RTCONFIG_BCMWL6) && !defined(RTN66U)
+	if (num_of_wl_if() > 1)
+		return;
 #endif
 
 #ifndef RTCONFIG_BCMARM
@@ -2527,6 +2602,10 @@ void init_syspara(void)
 
 #ifdef HND_ROUTER
 	refresh_cfe_nvram();
+#endif
+
+#ifdef RTAC86U
+	hnd_cfe_check();
 #endif
 
 	model = get_model();
@@ -2914,7 +2993,7 @@ int wl_max_no_vifs(int unit)
 {
 	char nv_interface[NVRAM_MAX_PARAM_LEN];
 	char cap[WLC_IOCTL_SMLEN];
-	char caps[WLC_IOCTL_SMLEN];
+	char caps[WLC_IOCTL_SMLEN * 2];
 	char *name = NULL;
 	char *next = NULL;
 	int max_no_vifs = 0;
@@ -2938,10 +3017,12 @@ int wl_max_no_vifs(int unit)
 		name = nv_interface;
 	}
 
-	if (!wl_iovar_get(name, "cap", (void *)caps, WLC_IOCTL_SMLEN)) {
+	if (!wl_iovar_get(name, "cap", (void *)caps, sizeof(caps))) {
 		foreach(cap, caps, next) {
 			if (!strcmp(cap, "mbss16"))
 				max_no_vifs = 16;
+			else if (!strcmp(cap, "mbss8"))
+				max_no_vifs = 8;
 			else if (!strcmp(cap, "mbss4"))
 				max_no_vifs = 4;
 		}
@@ -2949,12 +3030,8 @@ int wl_max_no_vifs(int unit)
 
 #ifdef RTCONFIG_PSR_GUEST
 	if (!atoi(nvram_safe_get("ure_disable")) || is_psr(unit)) {
-		if (is_psr(unit) && nvram_match(strcat_r(prefix, "psr_guest", tmp), "1"))
-#ifdef HND_ROUTER
-			max_no_vifs = 4;
-#else
-			max_no_vifs = 5;
-#endif
+		if (is_psr(unit) && nvram_match(strcat_r(prefix, "psr_mbss", tmp), "1"))
+			max_no_vifs = min(max_no_vifs, 5);
 		else
 			max_no_vifs = 2;
 	}
@@ -3040,6 +3117,10 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 #ifdef RTCONFIG_BCMWL6
 	int phytype;
 	char buf[8];
+	int bss_opmode_cap_reqd = 0;
+#endif
+#ifdef RTCONFIG_PSR_GUEST
+	char tmp3[100];
 #endif
 
 	if (subunit == -1)
@@ -3069,6 +3150,13 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 		    ((unit == 1) && nvram_get_int("smart_connect_x") == 2)) {
 			int wlif_count = num_of_wl_if();
 			for (i = unit + 1; i < wlif_count; i++) {
+#ifdef RTCONFIG_DWB
+				if((nvram_get_int("dwb_mode") == 1  || nvram_get_int("dwb_mode") == 3)  && nvram_get_int("dwb_band") > 0 && i == nvram_get_int("dwb_band"))
+				{
+					dbg("Don't apply wl0 to wl%d in smart_connect function, if enabled DWB mode.\n", i);
+					continue;
+				}
+#endif
 				snprintf(prefix2, sizeof(prefix2), "wl%d_", i);
 				nvram_set(strcat_r(prefix2, "ssid", tmp2), nvram_safe_get(strcat_r(prefix, "ssid", tmp)));
 				nvram_set(strcat_r(prefix2, "auth_mode_x", tmp2), nvram_safe_get(strcat_r(prefix, "auth_mode_x", tmp)));
@@ -3088,30 +3176,19 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			}
 		}
 
-		int acs = 1;
 #if 0
-		if ((unit == 0) && (nvram_get_int("smart_connect_x") == 1))
-			nvram_set_int(strcat_r(prefix, "taf_enable", tmp), 1);
-		else if ((unit == 1) && nvram_get_int("smart_connect_x"))
-			nvram_set_int(strcat_r(prefix, "taf_enable", tmp), 1);
-		else if ((unit == 2) && nvram_get_int("smart_connect_x"))
-			nvram_set_int(strcat_r(prefix, "taf_enable", tmp), 1);
-		else {
-			nvram_set_int(strcat_r(prefix, "taf_enable", tmp), 0);
-			acs = 0 ;
-		}
-#else
+		int acs = 1;
 		if (!(((unit == 0) && (nvram_get_int("smart_connect_x") == 1)) ||
 		      ((unit == 1) && nvram_get_int("smart_connect_x")) ||
 		      ((unit == 2) && nvram_get_int("smart_connect_x"))))
 			acs = 0;
-#endif
 
 		if (acs) {
 			nvram_set(strcat_r(prefix, "nmode_x", tmp), "0");
 			nvram_set(strcat_r(prefix, "bw", tmp), "0");
 			nvram_set(strcat_r(prefix, "chanspec", tmp), "0");
 		}
+#endif
 #endif
 
 			ure = is_ure(unit);
@@ -3169,17 +3246,6 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 				nvram_set(tmp, "0");
 			}
 		}
-
-//#ifdef RTCONFIG_PSR_GUEST
-#if 0
-		nvram_set(strcat_r(prefix, "mbss_rmac", tmp), (nvram_match(strcat_r(prefix, "psr_guest", tmp2), "1") && (dpsr_mode()
-#ifdef RTCONFIG_DPSTA
-			|| dpsta_mode()
-#endif
-			)) ? "1" : "0");
-#else
-		nvram_unset(strcat_r(prefix, "mbss_rmac", tmp));
-#endif
 #endif
 
 		memset(interface_list, 0, interface_list_size);
@@ -3209,9 +3275,19 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			}
 			else
 #ifdef RTCONFIG_PSR_GUEST
-			if (!nvram_match(strcat_r(prefix2, "psr_guest", tmp), "1"))
+			if (!nvram_match(strcat_r(prefix2, "psr_mbss", tmp), "1"))
 #endif
 				nvram_set(strcat_r(prefix, "bss_enabled", tmp), "0");
+
+#ifdef RTCONFIG_PSR_GUEST
+			nvram_set(strcat_r(prefix, "mbss_rmac", tmp), (nvram_match(strcat_r(prefix, "bss_enabled", tmp2), "1") && nvram_match(strcat_r(prefix2, "psr_mbss", tmp3), "1") && (dpsr_mode()
+#ifdef RTCONFIG_DPSTA
+				|| dpsta_mode()
+#endif
+				)) ? "1" : "0");
+#else
+			nvram_unset(strcat_r(prefix, "mbss_rmac", tmp));
+#endif
 		}
 #endif
 	}
@@ -3258,7 +3334,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 #if defined(RTCONFIG_BCMWL6) && defined(RTCONFIG_PROXYSTA)
 	if (is_psta(unit) || is_psr(unit)) {
 #if defined(RTCONFIG_AMAS) && defined(RTCONFIG_DPSTA)
-		if (dpsta_mode() && nvram_get_int("re_mode") == 1)
+		if ((dpsta_mode() || dpsr_mode()) && nvram_get_int("re_mode") == 1)
 			snprintf(prefix2, sizeof(prefix2), "wlc%d_", unit);
 		else
 #endif
@@ -3303,23 +3379,40 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 				}
 				nvram_set(strcat_r(prefix, "crypto", tmp), nvram_safe_get(strcat_r(prefix2, "crypto", tmp2)));
 				nvram_set(strcat_r(prefix, "wpa_psk", tmp), nvram_safe_get(strcat_r(prefix2, "wpa_psk", tmp2)));
+				nvram_set(strcat_r(prefix, "radius_ipaddr", tmp), nvram_safe_get(strcat_r(prefix2, "radius_ipaddr", tmp2)));
+				nvram_set(strcat_r(prefix, "radius_key", tmp), nvram_safe_get(strcat_r(prefix2, "radius_key", tmp2)));
+				nvram_set(strcat_r(prefix, "radius_port", tmp), nvram_safe_get(strcat_r(prefix2, "radius_port", tmp2)));
 
 #if defined(RTCONFIG_AMAS) && defined(RTCONFIG_DPSTA)
 				if (dpsta_mode() && nvram_get_int("re_mode") == 1)
 				{
-					snprintf(prefix_local, sizeof(prefix_local), "wl%d.%d_", unit, 1);
-					nvram_set(strcat_r(prefix_local, "ssid", tmp), nvram_safe_get(strcat_r(prefix2, "ssid", tmp2)));
-					nvram_set(strcat_r(prefix_local, "auth_mode_x", tmp), nvram_safe_get(strcat_r(prefix2, "auth_mode", tmp2)));
-					nvram_set(strcat_r(prefix_local, "wep_x", tmp), nvram_safe_get(strcat_r(prefix2, "wep", tmp2)));
-					if (nvram_get_int(strcat_r(prefix2, "wep", tmp))) {
-						nvram_set(strcat_r(prefix_local, "key", tmp), nvram_safe_get(strcat_r(prefix2, "key", tmp2)));
-						nvram_set(strcat_r(prefix_local, "key1", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
-						nvram_set(strcat_r(prefix_local, "key2", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
-						nvram_set(strcat_r(prefix_local, "key3", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
-						nvram_set(strcat_r(prefix_local, "key4", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
+#ifdef RTCONFIG_DWB
+					if((nvram_get_int("dwb_mode") == 1  || nvram_get_int("dwb_mode") == 3)  && nvram_get_int("dwb_band") > 0 && unit == nvram_get_int("dwb_band"))
+					{
+						dbg("Don't apply wlc1 to wl1.1 or wlc2 to wl2.1, if enabled DWB mode.\n");
 					}
-					nvram_set(strcat_r(prefix_local, "crypto", tmp), nvram_safe_get(strcat_r(prefix2, "crypto", tmp2)));
-					nvram_set(strcat_r(prefix_local, "wpa_psk", tmp), nvram_safe_get(strcat_r(prefix2, "wpa_psk", tmp2)));
+					else
+#endif
+					{
+						dbg("prefix_local = %s, prefix2 = %s\n", prefix_local, prefix2 );
+
+						snprintf(prefix_local, sizeof(prefix_local), "wl%d.%d_", unit, 1);
+						nvram_set(strcat_r(prefix_local, "ssid", tmp), nvram_safe_get(strcat_r(prefix2, "ssid", tmp2)));
+						nvram_set(strcat_r(prefix_local, "auth_mode_x", tmp), nvram_safe_get(strcat_r(prefix2, "auth_mode", tmp2)));
+						nvram_set(strcat_r(prefix_local, "wep_x", tmp), nvram_safe_get(strcat_r(prefix2, "wep", tmp2)));
+						if (nvram_get_int(strcat_r(prefix2, "wep", tmp))) {
+							nvram_set(strcat_r(prefix_local, "key", tmp), nvram_safe_get(strcat_r(prefix2, "key", tmp2)));
+							nvram_set(strcat_r(prefix_local, "key1", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
+							nvram_set(strcat_r(prefix_local, "key2", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
+							nvram_set(strcat_r(prefix_local, "key3", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
+							nvram_set(strcat_r(prefix_local, "key4", tmp), nvram_safe_get(strcat_r(prefix2, "wep_key", tmp2)));
+						}
+						nvram_set(strcat_r(prefix_local, "crypto", tmp), nvram_safe_get(strcat_r(prefix2, "crypto", tmp2)));
+						nvram_set(strcat_r(prefix_local, "wpa_psk", tmp), nvram_safe_get(strcat_r(prefix2, "wpa_psk", tmp2)));
+						nvram_set(strcat_r(prefix, "radius_ipaddr", tmp), nvram_safe_get(strcat_r(prefix2, "radius_ipaddr", tmp2)));
+						nvram_set(strcat_r(prefix, "radius_key", tmp), nvram_safe_get(strcat_r(prefix2, "radius_key", tmp2)));
+						nvram_set(strcat_r(prefix, "radius_port", tmp), nvram_safe_get(strcat_r(prefix2, "radius_port", tmp2)));
+					}
 				}
 #endif
 			}
@@ -3342,7 +3435,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			/* early set wlx_vifs for psr mode */
 			if (is_psr(unit)
 #ifdef RTCONFIG_PSR_GUEST
-				&& !nvram_match(strcat_r(prefix, "psr_guest", tmp), "1")
+				&& !nvram_match(strcat_r(prefix, "psr_mbss", tmp), "1")
 #endif
 			) {
 				sprintf(tmp2, "wl%d.1", unit);
@@ -3471,6 +3564,16 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 		else
 			nvram_set(strcat_r(prefix, "mode", tmp), "ap");
 
+#if defined(RTCONFIG_HND_ROUTER_AX) || defined(RTCONFIG_BW160M)
+		if (!nvram_match(strcat_r(prefix, "mode", tmp), "ap") &&
+			!nvram_match(strcat_r(prefix, "mode", tmp), "wds")) {
+#if defined(RTCONFIG_AMAS) && defined(RTCONFIG_DPSTA)
+			if (!(dpsta_mode() && nvram_get_int("re_mode") == 1))
+#endif
+			nvram_set(strcat_r(prefix, "bw_160", tmp), nvram_match(strcat_r(prefix, "nband", tmp2), "1") ? "1" : "0");
+		}
+#endif
+
 #if defined(RTCONFIG_BCMWL6) && defined(RTCONFIG_PROXYSTA)
 #ifdef RTCONFIG_BCMARM
 		int dwds = 0;
@@ -3587,12 +3690,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 #endif
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
 #ifdef RTCONFIG_BCMWL6
-#if (defined(RTCONFIG_BCM7) || defined(RTCONFIG_BCM_7114) || defined(HND_ROUTER)) && defined(BCM_BSD)
-			if (nvram_get_int("smart_connect_x") && get_bsd_nonvht_status(unit))
-				nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "3");	// devices must advertise VHT (11ac) capabilities to be allowed to associate
-			else
-#endif
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "0");	// no requirements on joining devices
+			bss_opmode_cap_reqd = 0;				// no requirements on joining devices
 #endif
 		}
 		else if (nvram_match(strcat_r(prefix, "nmode_x", tmp), "1"))	// n only
@@ -3606,7 +3704,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "gmode", tmp), nvram_match(strcat_r(prefix, "nband", tmp2), "2") ? "1" : "-1");
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
 #ifdef RTCONFIG_BCMWL6
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "2");	// devices must advertise HT (11n) capabilities to be allowed to associate
+			bss_opmode_cap_reqd = 2;				// devices must advertise HT (11n) capabilities to be allowed to associate
 #endif
 		}
 		else if (nvram_match(strcat_r(prefix, "nmode_x", tmp), "4"))	// g/n mixed or a/n mixed
@@ -3621,9 +3719,9 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
 #ifdef RTCONFIG_BCMWL6
 			if (nvram_match(strcat_r(prefix, "nband", tmp), "2"))
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "1");	// devices must advertise ERP (11g) capabilities to be allowed to associate
+				bss_opmode_cap_reqd = 1;			// devices must advertise ERP (11g) capabilities to be allowed to associate
 			else
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "0");	// no requirements on joining devices
+				bss_opmode_cap_reqd = 0;			// no requirements on joining devices
 #endif
 		}
 		else if (nvram_match(strcat_r(prefix, "nmode_x", tmp), "5"))	// g only
@@ -3637,7 +3735,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "gmode", tmp), "2");
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
 #ifdef RTCONFIG_BCMWL6
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "1");	// devices must advertise ERP (11g) capabilities to be allowed to associate
+			bss_opmode_cap_reqd = 1;				// devices must advertise ERP (11g) capabilities to be allowed to associate
 #endif
 		}
 		else if (nvram_match(strcat_r(prefix, "nmode_x", tmp), "6"))	// b only
@@ -3651,7 +3749,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "gmode", tmp), "0");
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
 #ifdef RTCONFIG_BCMWL6
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "0");	// no requirements on joining devices
+			bss_opmode_cap_reqd = 0;				// no requirements on joining devices
 #endif
 		}
 		else if (nvram_match(strcat_r(prefix, "nmode_x", tmp), "7"))	// a only
@@ -3665,7 +3763,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "gmode", tmp), "-1");
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
 #ifdef RTCONFIG_BCMWL6
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "0");	// no requirements on joining devices
+			bss_opmode_cap_reqd = 0;				// no requirements on joining devices
 #endif
 		}
 #ifdef RTCONFIG_BCMWL6
@@ -3683,7 +3781,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "gmode", tmp), "1");
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
 #ifdef RTCONFIG_BCMWL6
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "0");	// no requirements on joining devices
+			bss_opmode_cap_reqd = 0;				// no requirements on joining devices
 #endif
 		}
 #ifdef RTCONFIG_BCMWL6
@@ -3695,7 +3793,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "vreqd", tmp), "1");
 			nvram_set(strcat_r(prefix, "gmode", tmp), "-1");
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "3");	// devices must advertise VHT (11ac) capabilities to be allowed to associate
+			bss_opmode_cap_reqd = 3;				// devices must advertise VHT (11ac) capabilities to be allowed to associate
 		}
 		else if (nvram_match(strcat_r(prefix, "nmode_x", tmp), "8"))	// n/ac mixed
 		{
@@ -3704,14 +3802,20 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 			nvram_set(strcat_r(prefix, "vreqd", tmp), "1");
 			nvram_set(strcat_r(prefix, "gmode", tmp), "-1");
 			nvram_set(strcat_r(prefix, "rate", tmp), "0");
-			nvram_set(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), "2");	// devices must advertise HT (11n) capabilities to be allowed to associate
+			bss_opmode_cap_reqd = 2;				// devices must advertise HT (11n) capabilities to be allowed to associate
 		}
 #endif
-#if 0
+
+#if (defined(RTCONFIG_BCM7) || defined(RTCONFIG_BCM_7114) || defined(HND_ROUTER)) && defined(BCM_BSD)
+		if (nvram_get_int("smart_connect_x") && get_bsd_nonvht_status(unit) && (bss_opmode_cap_reqd < 3))
+			bss_opmode_cap_reqd = 3;				// devices must advertise VHT (11ac) capabilities to be allowed to associate
+#endif
+
+		nvram_set_int(strcat_r(prefix, "bss_opmode_cap_reqd", tmp), bss_opmode_cap_reqd);
+
 		if (nvram_match(strcat_r(prefix, "nband", tmp), "2") &&
 			nvram_match(strcat_r(prefix, "nmode", tmp2), "-1"))
 			nvram_set(strcat_r(prefix, "gmode_protection", tmp), "auto");
-#endif
 #ifdef RTCONFIG_BCMWL6
 		if (nvram_match(strcat_r(prefix, "bw", tmp), "0"))			// Auto
 		{
@@ -3728,6 +3832,12 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 				if (nvram_match(strcat_r(prefix, "vreqd", tmp2), "1")
 					&& nvram_match(strcat_r(prefix, "phytype", tmp), "v")
 				)
+#if defined(RTCONFIG_HND_ROUTER_AX) || defined(RTCONFIG_BW160M)
+					if (nvram_match(strcat_r(prefix, "bw_160", tmp), "1"))
+						nvram_set(strcat_r(prefix, "bw_cap", tmp), hw_vht_cap() ? "15" : "3");  // 160M
+					else
+#endif
+
 					nvram_set(strcat_r(prefix, "bw_cap", tmp), hw_vht_cap() ? "7" : "3");// 80M
 				else
 #endif
@@ -3760,6 +3870,21 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 				nvram_set(strcat_r(prefix, "bw_cap", tmp), "3");
 			else
 				nvram_set(strcat_r(prefix, "bw_cap", tmp), hw_vht_cap() ? "7" : "3");
+			nvram_set(strcat_r(prefix, "obss_coex", tmp), "0");
+		}
+#endif
+		else if (nvram_match(strcat_r(prefix, "bw", tmp), "4"))         // 80+80M
+		{
+			//TBD
+		}
+#if defined(RTCONFIG_HND_ROUTER_AX) || defined(RTCONFIG_BW160M)
+		else if (nvram_match(strcat_r(prefix, "bw", tmp), "5") &&       // 160M
+			nvram_match(strcat_r(prefix, "vreqd", tmp2), "1"))
+		{
+			if (nvram_match(strcat_r(prefix, "nband", tmp), "2"))   // 2.4G
+				nvram_set(strcat_r(prefix, "bw_cap", tmp), "3");
+			else
+				nvram_set(strcat_r(prefix, "bw_cap", tmp), hw_vht_cap() ? "15" : "3");
 			nvram_set(strcat_r(prefix, "obss_coex", tmp), "0");
 		}
 #endif
@@ -3903,7 +4028,7 @@ void generate_wl_para(char *ifname, int unit, int subunit)
 		nvram_set_int(strcat_r(prefix, "wmf_ucast_upnp", tmp), 0);
 		nvram_set_int(strcat_r(prefix, "wmf_igmpq_filter", tmp), 1);
 #endif
-		nvram_set_int(strcat_r(prefix, "acs_fcs_mode", tmp), i && ((unit < 2) || nvram_match(strcat_r(prefix, "reg_mode", tmp2), "off")) ? 1 : 0);
+		nvram_set_int(strcat_r(prefix, "acs_fcs_mode", tmp), i && ((unit < 2) || !nvram_match(strcat_r(prefix, "reg_mode", tmp2), "h")) ? 1 : 0);
 		nvram_set_int(strcat_r(prefix, "dcs_csa_unicast", tmp), i ? 1 : 0);
 #endif
 #else // RTCONFIG_EMF
@@ -5065,7 +5190,15 @@ _dprintf("*** Multicast IPTV: config Singtel TR069 on wan port ***\n");
 #endif
 			sprintf(port_id, "%d", wan_vid);
 			/* handle vlan + pppoe w/o bridge case. Using vconfig instead */
-			if (nvram_match("switch_wantag", "movistar") || nvram_match("switch_wantag", "unifi_biz") || nvram_match("switch_wantag", "stuff_fibre") || (nvram_match("switch_wantag", "none") && switch_stb == 0 && !wan_vid)) {
+			if (nvram_match("switch_wantag", "movistar") || nvram_match("switch_wantag", "unifi_biz") || 
+				nvram_match("switch_wantag", "stuff_fibre") || nvram_match("switch_wantag", "spark") ||
+				nvram_match("switch_wantag", "2degrees") || nvram_match("switch_wantag", "slingshot") ||
+				nvram_match("switch_wantag", "orcon") || nvram_match("switch_wantag", "voda_nz") ||
+				nvram_match("switch_wantag", "tpg") || nvram_match("switch_wantag", "iinet") ||
+				nvram_match("switch_wantag", "aapt") || nvram_match("switch_wantag", "intronode") ||
+				nvram_match("switch_wantag", "amaysim") || nvram_match("switch_wantag", "dodo") ||
+				nvram_match("switch_wantag", "iprimus") ||
+				(nvram_match("switch_wantag", "none") && switch_stb == 0 && !wan_vid)) {
 				eval("vconfig", "add", "eth0", port_id);
 				sprintf(wan_dev, "vlan%d", wan_vid);
 				eval("ifconfig", wan_dev, "allmulti", "up");
@@ -5393,21 +5526,8 @@ _dprintf("*** Multicast IPTV: config IPTV on wan port ***\n");
 				if (nvram_invmatch("switch_wan1prio", "0"))
 					eval("vconfig", "set_egress_map", wan_dev, "0", nvram_get("switch_wan1prio"));
 				eval("ifconfig", wan_dev, "allmulti", "up");
-#if 0
-				nvram_set("wan10_ifname", "eth0.v1");
-				/* Handle wan(IPTV) vlan traffic */
-				sprintf(port_id, "%d", iptv_vid);
-				eval("vlanctl", "--mcast", "--if-create", "eth0", "1");
-				/* pop tag for entering CPU */
-				eval("vlanctl", "--if", "eth0", "--rx", "--tags", "1", "--filter-vid", port_id, "0", "--pop-tag", "--set-rxif", "eth0.v1", "--rule-append");
-				/* tx push tag */
-				/* Set Wan PRIO */
-				if (nvram_invmatch("switch_wan1prio", "0"))
-					eval("vlanctl", "--if", "eth0", "--tx", "--tags", "0", "--filter-txif", "eth0.v1", "--push-tag", "--set-vid", port_id, "0", "--set-pbits", nvram_get("switch_wan1prio"), "0", "--rule-append");
-				else
-					eval("vlanctl", "--if", "eth0", "--tx", "--tags", "0", "--filter-txif", "eth0.v1", "--push-tag", "--set-vid", port_id, "0", "--rule-append");
-				eval("ifconfig", "eth0.v1", "allmulti", "up");
-#endif
+				eval("bcmmcastctl", "mode", "-i",  "br0",  "-p", "1",  "-m", "0");
+				eval("bcmmcastctl", "mode", "-i",  "br0",  "-p", "2",  "-m", "0");
 			}
 		}
 		if (switch_stb >= 8) {
@@ -5421,27 +5541,8 @@ _dprintf("*** Multicast IPTV: config VOIP on wan port ***\n");
 				if (nvram_invmatch("switch_wan2prio", "0"))
 					eval("vconfig", "set_egress_map", wan_dev, "0", nvram_get("switch_wan2prio"));
 				eval("ifconfig", wan_dev, "allmulti", "up");
-#if 0
-				nvram_set("wan11_ifname", "eth0.v2");
-				/* Handle wan(IPTV) vlan traffic */
-				sprintf(port_id, "%d", voip_vid);
-				eval("vlanctl", "--mcast", "--if-create", "eth0", "2");
-				/* pop tag for entering CPU */
-				eval("vlanctl", "--if", "eth0", "--rx", "--tags", "1", "--filter-vid", port_id, "0", "--pop-tag", "--set-rxif", "eth0.v2", "--rule-append");
-				/* tx push tag */
-				/* Set Wan PRIO */
-				if (nvram_invmatch("switch_wan2prio", "0"))
-					eval("vlanctl", "--if", "eth0", "--tx", "--tags", "0", "--filter-txif", "eth0.v2", "--push-tag", "--set-vid", port_id, "0", "--set-pbits", nvram_get("switch_wan2prio"), "0", "--rule-append");
-				else
-					eval("vlanctl", "--if", "eth0", "--tx", "--tags", "0", "--filter-txif", "eth0.v2", "--push-tag", "--set-vid", port_id, "0", "--rule-append");
-				eval("ifconfig", "eth0.v2", "allmulti", "up");
-#endif
 			}
 		}
-#if 0
-		if (switch_stb >=9) {
-		}
-#endif
 #endif
 		break;
 #endif
@@ -6895,18 +6996,20 @@ void set_acs_ifnames()
 	char word[256], *next;
 	char tmp[128], tmp2[128], prefix[] = "wlXXXXXXXXXX_";
 	int unit = 0;
-	int dfs_in_use = 0;
-#if defined(RTAC3200) || defined(RTAC5300) || defined(GTAC5300)
-	int dfs_in_use_5g_2 = 0;
-#endif
 #ifdef RTCONFIG_DPSTA
 	char wlvif[] = "wlxxxx";
 #endif
+	char list[1024], list_5g_band1_chans[1024], list_5g_band2_chans[1024], list_5g_band3_chans[1024];
 
 	wl_check_5g_band_group();
 
+	memset(list, 0, sizeof(list));
 	memset(acs_ifnames, 0, sizeof(acs_ifnames));
 	memset(acs_ifnames2, 0, sizeof(acs_ifnames2));
+
+	wl_list_5g_chans(1, 1, list_5g_band1_chans, sizeof(list_5g_band1_chans));
+	wl_list_5g_chans(1, 2, list_5g_band2_chans, sizeof(list_5g_band2_chans));
+	wl_list_5g_chans((num_of_wl_if() == 3) ? 2 : 1, 3, list_5g_band3_chans, sizeof(list_5g_band3_chans));
 
 	foreach (word, nvram_safe_get("wl_ifnames"), next) {
 #ifdef RTCONFIG_QTN
@@ -6929,12 +7032,12 @@ void set_acs_ifnames()
 #endif
 
 #ifdef RTCONFIG_DPSTA
-			if (dpsta_mode())
+			if (is_psr(unit))
 				snprintf(wlvif, sizeof(wlvif), "wl%d.1", unit);
 #endif
 
 #ifdef RTCONFIG_DPSTA
-			if (dpsta_mode())
+			if (is_psr(unit))
 				sprintf(acs_ifnames2, "%s%s%s", acs_ifnames, strlen(acs_ifnames) ? " " : "", wlvif);
 			else
 #endif
@@ -6951,9 +7054,11 @@ void set_acs_ifnames()
 
 	nvram_set("acs_ifnames", acs_ifnames);
 
+	if ((num_of_wl_if() == 3 && !(nvram_get_hex("wl2_band5grp") & WL_5G_BAND_4))
 #ifdef RTCONFIG_TCODE
-	if (strncmp(nvram_safe_get("territory_code"), "UA", 2) && !nvram_match("location_code", "RU"))
+		|| (num_of_wl_if() == 2 && strncmp(nvram_safe_get("territory_code"), "UA", 2) && !nvram_match("location_code", "RU"))
 #endif
+	)
 		nvram_set("acs_band3", "1");
 
 	/* exclude acsd from selecting chanspec 12, 12u, 13, 13u, 14, 14u */
@@ -6961,33 +7066,34 @@ void set_acs_ifnames()
 
 #if defined(RTAC3200) || defined(RTAC5300) || defined(GTAC5300)
 	nvram_set("wl1_acs_excl_chans", "");
-	dfs_in_use = nvram_get_int("wl1_band5grp") & WL_5G_BAND_2;
-	dfs_in_use_5g_2 = (nvram_get_int("wl2_band5grp") & WL_5G_BAND_3) && nvram_match("acs_band3", "1");
 
-	if ((nvram_get_int("wl2_band5grp") & WL_5G_BAND_3))
+	if ((nvram_get_hex("wl2_band5grp") & WL_5G_BAND_3))
 	{
 		/* exclude acsd from selecting chanspec 100, 100l, 100/80, 104, 104u, 104/80, 108, 108l, 108/80, 112, 112u, 112/80, 116, 132, 132l, 136, 136u, 140 */
-		if (nvram_get_int("wl2_band5grp") & WL_5G_BAND_4)
-			nvram_set("wl2_acs_excl_chans", nvram_match("acs_band3", "1") ? "0xd0a5" : "0xd064,0xd866,0xe06a,0xd068,0xd966,0xe16a,0xd06c,0xd86e,0xe26a,0xd070,0xd96e,0xe36a,0xd074,0xd084,0xd886,0xd088,0xd986,0xd08c,0xd0a5");
+		if (nvram_get_hex("wl2_band5grp") & WL_5G_BAND_4)
+		{
+			snprintf(list, sizeof(list), "%s,0xd0a5", list_5g_band3_chans);
+			nvram_set("wl2_acs_excl_chans", nvram_match("acs_band3", "1") ? "0xd0a5" : list);
+		}
 		else
-			nvram_set("wl2_acs_excl_chans", nvram_match("acs_band3", "1") ? "" : "0xd064,0xd866,0xe06a,0xd068,0xd966,0xe16a,0xd06c,0xd86e,0xe26a,0xd070,0xd96e,0xe36a,0xd074,0xd084,0xd886,0xd088,0xd986,0xd08c");
+			nvram_set("wl2_acs_excl_chans", nvram_match("acs_band3", "1") ? "" : list_5g_band3_chans);
 	}
 	else
 	/* exclude acsd from selecting chanspec 165 */
-	nvram_set("wl2_acs_excl_chans", (nvram_get_int("wl2_band5grp") & WL_5G_BAND_4) ? "0xd0a5" : "");
+	nvram_set("wl2_acs_excl_chans", (nvram_get_hex("wl2_band5grp") & WL_5G_BAND_4) ? "0xd0a5" : "");
 #else
 	if (nvram_match("wl1_band5grp", "7")) {		// EU, JP, UA
 #ifdef RTAC66U
 		if (!nvram_match("wl1_dfs", "1"))
 			nvram_set("acs_dfs", "0");
 #endif
+		snprintf(list, sizeof(list), "%s,%s", list_5g_band2_chans, list_5g_band3_chans);
 		if (!strncmp(nvram_safe_get("territory_code"), "UA", 2) || nvram_match("location_code", "RU"))
 			/* exclude acsd from selecting chanspec 100, 100l, 100/80, 104, 104u, 104/80, 108, 108l, 108/80, 112, 112u, 112/80, 116, 132, 132l, 136, 136u, 140 */
-			nvram_set("wl1_acs_excl_chans", nvram_match("acs_dfs", "1") ? (nvram_match("acs_band3", "1") ? "" : "0xd064,0xd866,0xe06a,0xd068,0xd966,0xe16a,0xd06c,0xd86e,0xe26a,0xd070,0xd96e,0xe36a,0xd074,0xd084,0xd886,0xd088,0xd986,0xd08c") : "0xd034,0xe03a,0xd836,0xd038,0xe13a,0xd936,0xd03c,0xe23a,0xd83e,0xd040,0xe33a,0xd93e,0xd064,0xd866,0xe06a,0xd068,0xd966,0xe16a,0xd06c,0xd86e,0xe26a,0xd070,0xd96e,0xe36a,0xd074,0xd084,0xd886,0xd088,0xd986,0xd08c");
+			nvram_set("wl1_acs_excl_chans", nvram_match("acs_dfs", "1") ? (nvram_match("acs_band3", "1") ? "" : list_5g_band3_chans) : list);
 		else
 			/* exclude acsd from selecting chanspec 52, 52l, 52/80, 56, 56u, 56/80, 60, 60l, 60/80, 64, 64u, 64/80, 100, 100l, 100/80, 104, 104u, 104/80, 108, 108l, 108/80, 112, 112u, 112/80, 116, 132, 132l, 136, 136u, 140 */
-			nvram_set("wl1_acs_excl_chans", nvram_match("acs_dfs", "1") ? "" : "0xd034,0xe03a,0xd836,0xd038,0xe13a,0xd936,0xd03c,0xe23a,0xd83e,0xd040,0xe33a,0xd93e,0xd064,0xd866,0xe06a,0xd068,0xd966,0xe16a,0xd06c,0xd86e,0xe26a,0xd070,0xd96e,0xe36a,0xd074,0xd084,0xd886,0xd088,0xd986,0xd08c");
-		dfs_in_use = nvram_match("acs_dfs", "1") || nvram_match("acs_band3", "1");
+			nvram_set("wl1_acs_excl_chans", nvram_match("acs_dfs", "1") ? "" : list);
 	} else if (nvram_match("wl1_band5grp", "9")) {	// US, CA, TW, SG, KR, AU (FCC)
 		if (nvram_match("wl1_country_code", "US") ||
 		    nvram_match("wl1_country_code", "Q1") || nvram_match("wl1_country_code", "Q2") ||
@@ -6998,11 +7104,12 @@ void set_acs_ifnames()
 			nvram_set("acs_band1", "1");
 
 		/* exclude acsd from selecting chanspec 36, 36l, 36/80, 40, 40u, 40/80, 44, 44l, 44/80, 48, 48u, 48/80, 165 for non-US region by default */
-		nvram_set("wl1_acs_excl_chans", nvram_match("acs_band1", "1") ? "0xd0a5" : "0xd024,0xd826,0xe02a,0xd028,0xd926,0xe12a,0xd02c,0xd82e,0xe22a,0xd030,0xd92e,0xe32a,0xd0a5");
+		snprintf(list, sizeof(list), "%s,0xd0a5", list_5g_band1_chans);
+		nvram_set("wl1_acs_excl_chans", nvram_match("acs_band1", "1") ? "0xd0a5" : list);
 	} else if (nvram_match("wl1_band5grp", "f")) {	// AU (NEW)
 		/* exclude acsd from selecting chanspec 52, 52l, 52/80, 56, 56u, 56/80, 60, 60l, 60/80, 64, 64u, 64/80, 100, 100l, 100/80, 104, 104u, 104/80, 108, 108l, 108/80, 112, 112u, 112/80, 116, 132, 132l, 136, 136u, 140, 165 */
-		nvram_set("wl1_acs_excl_chans", nvram_match("acs_dfs", "1") ? "0xd0a5" : "0xd034,0xe03a,0xd836,0xd038,0xe13a,0xd936,0xd03c,0xe23a,0xd83e,0xd040,0xe33a,0xd93e,0xd064,0xd866,0xe06a,0xd068,0xd966,0xe16a,0xd06c,0xd86e,0xe26a,0xd070,0xd96e,0xe36a,0xd074,0xd084,0xd886,0xd088,0xd986,0xd08c,0xd0a5");
-		dfs_in_use = nvram_match("acs_dfs", "1");
+		snprintf(list, sizeof(list), "%s,%s,0xd0a5", list_5g_band2_chans, list_5g_band3_chans);
+		nvram_set("wl1_acs_excl_chans", nvram_match("acs_dfs", "1") ? "0xd0a5" : list);
 	} else {					// CN, AU (FCC + CE)
 		/* exclude acsd from selecting chanspec 165 */
 		nvram_set("wl1_acs_excl_chans", "0xd0a5");
@@ -7010,9 +7117,9 @@ void set_acs_ifnames()
 #endif
 
 	nvram_set_int("wl0_acs_dfs", 0);
-	nvram_set_int("wl1_acs_dfs", dfs_in_use ? 2 : 0);
+	nvram_set_int("wl1_acs_dfs", nvram_match("wl1_reg_mode", "h") ? 2 : 0);
 #if defined(RTAC3200) || defined(RTAC5300) || defined(GTAC5300)
-	nvram_set_int("wl2_acs_dfs", dfs_in_use_5g_2 ? 2 : 0);
+	nvram_set_int("wl2_acs_dfs", nvram_match("wl2_reg_mode", "h") ? 2 : 0);
 #endif
 }
 #endif
