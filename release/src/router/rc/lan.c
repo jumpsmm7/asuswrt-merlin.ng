@@ -4409,7 +4409,7 @@ lan_up(char *lan_ifname)
 #ifdef RTCONFIG_DPSTA
 			|| (dpsta_mode() && nvram_get_int("re_mode") == 0)
 #endif
-			) && nvram_get_int("wlc_state") == WLC_STATE_CONNECTED)
+		    ) && nvram_get_int("wlc_state") == WLC_STATE_CONNECTED)
 #if defined(RTCONFIG_AMAS)
 		|| (nvram_get_int("re_mode") == 1)
 #endif
