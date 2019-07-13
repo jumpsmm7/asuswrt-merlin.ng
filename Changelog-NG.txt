@@ -52,7 +52,7 @@ Asuswrt-Merlin 384/NG Changelog
   - UPDATED: miniupnpd 20190604.
   - CHANGED: Local clients will be shown by their hostname
              on the Classification page.
-  - CHANGED: Reworked handling of up/down events in OpenVPN.
+  - CHANGED: Reworked handling of up/down events in OpenVPN. 
              Server instance will now also use its own
              updown script, which will handle firing up
              openvpn-event (if present).

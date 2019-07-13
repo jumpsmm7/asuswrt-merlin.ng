@@ -692,7 +692,7 @@ function update_applist(e){
    												<td><div class="formfontdesc" id="usbHint"><#AiCloud_maintext_note#></div></td> 
   										</tr>
 											<tr>
-   												<td><div class="formfontdesc" id="usbHint2"><#Learn_more#> : <a href="http://www.asus.com/search/results.aspx?SearchKey=AiCloud&SearchType=FAQ&IsSupport=True&Page=1" target="_blank" style="color:#FC0;text-decoration: underline; font-family:Lucida Console;">GO</a></div></td> 
+   												<td><div class="formfontdesc" id="usbHint2"><#Learn_more#> : <a href="https://www.asus.com/search/results.aspx?SearchKey=AiCloud&SearchType=FAQ&IsSupport=True&Page=1" target="_blank" style="color:#FC0;text-decoration: underline; font-family:Lucida Console;">GO</a></div></td> 
   										</tr>  	   
   										<tr>
    												<td align="center" width="740px" height="60px">
@@ -722,19 +722,19 @@ function update_applist(e){
 																 	<div id="accessMethod"></div>
 																 	</li>
 																	<li style="margin-top:-5px;">
-																	 <#FAQ_Find#> <a style="font-weight: bolder;text-decoration: underline;" href="http://www.asus.com/search/results.aspx?SearchKey=AiCloud&SearchType=FAQ&IsSupport=True&Page=1" target="_blank">GO</a>
+																	 <#FAQ_Find#> <a style="font-weight: bolder;text-decoration: underline;" href="https://www.asus.com/search/results.aspx?SearchKey=AiCloud&SearchType=FAQ&IsSupport=True&Page=1" target="_blank">GO</a>
 																	</li>
 																</ul>
 															</td>
 															<td>							
 																<a id="googleplay" href="https://play.google.com/store/apps/details?id=com.asustek.aicloud" target="_blank">
-																	<div style="width:172px;height:51px;background:url('images/cloudsync/googleplay.png') no-repeat;background-size:75%;"></div>
+																	<div style="width:172px;height:51px;background:url('images/googleplay.png') no-repeat;background-size:75%;"></div>
 																</a>												
 																<a id="wandoujia" href="http://www.wandoujia.com/apps/com.asus.aihome" target="_blank" style="display:none">
 																	<div style="width:130px;height:51px;text-align: center;line-height:51px;line-height: 51px;font-size: 20px;font-weight: bold;text-decoration: underline;">豌豆荚</div>
 																</a>			
 																<a href="https://itunes.apple.com/us/app/aicloud-lite/id527118674" target="_blank">
-																	<div style="width:172px;height:51px;background:url('images/cloudsync/AppStore.png') no-repeat;background-size:75%;"></div>
+																	<div style="width:172px;height:51px;background:url('images/AppStore.png') no-repeat;background-size:75%;"></div>
 																</a>	
 															</td>
 														</tr>

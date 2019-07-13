@@ -165,6 +165,12 @@
 
 #define ACTION_LOCK		"/var/lock/action"
 
+#if defined(RTCONFIG_CFG80211)
+#define IWPRIV                 "cfg80211tool"
+#else
+#define IWPRIV                 "iwpriv"
+#endif
+
 #ifdef RTCONFIG_PUSH_EMAIL
 //#define logmessage logmessage_push
 #define logmessage logmessage_normal	//tmp
@@ -317,6 +323,14 @@ enum {
 	WAVE_ACTION_CLIENT5G_OFF=17,
 	WAVE_ACTION_SET_WPS2G_CONFIGURED=18,
 	WAVE_ACTION_SET_WPS5G_CONFIGURED=19,
+#ifdef RTCONFIG_AMAS
+	WAVE_ACTION_ADD_BEACON_VSIE=20,
+	WAVE_ACTION_DEL_BEACON_VSIE=21,
+	WAVE_ACTION_ADD_PROBE_REQ_VSIE=22,
+	WAVE_ACTION_DEL_PROBE_REQ_VSIE=23,
+	WAVE_ACTION_CLEAR_ALL_PROBE_REQ_VSIE=24,
+#endif
+	WAVE_ACTION_SET_STA_CONFIG=25,
 };
 #endif
 
@@ -324,7 +338,7 @@ enum {
 #define GIF_PREFIXLEN  0x0002  /* return prefix length */
 #define GIF_PREFIX     0x0004  /* return prefix, not addr */
 
-#define EXTEND_AIHOME_API_LEVEL		17
+#define EXTEND_AIHOME_API_LEVEL		19
 
 #define EXTEND_HTTPD_AIHOME_VER		0
 
@@ -344,9 +358,16 @@ enum romaingEvent {
 	EID_RM_STA_FILTER,
 	EID_RM_MAX
 };
+enum conndiagEvent {
+	EID_CD_STA_CHK_ONE = 1,
+	EID_CD_STA_CHK_ONE_RSP,
+	EID_CD_MAX
+};
 #define RAST_IPC_MAX_CONNECTION		5
 #define RAST_IPC_SOCKET_PATH		"/etc/rast_ipc_socket"
+#define CONNDIAG_IPC_SOCKET_PATH	"/etc/conndiag_ipc_socket"
 #define RAST_PREFIX     "RAST"
+#define CHKSTA_PREFIX   "CHKSTA"
 /* key name of json from rast */
 #define RAST_EVENT_ID   "EID"
 #define RAST_STA        "STA"
@@ -361,6 +382,13 @@ enum romaingEvent {
 #define RAST_STA_RSSI	"STA_RSSI"
 #define RAST_CANDIDATE_AP_RSSI	"AP_RSSI"
 #define RAST_CANDIDATE_AP_RSSI_CRITERIA  "AP_RSSI_CRITERIA"
+#define RAST_ENABLE	"ENABLE"
+#define RAST_RATE       "RATE"
+#define RAST_TXRATE     "TXRATE"
+#define RAST_RXRATE     "RXRATE"
+#define RAST_DATA       "DATA"
+#define RAST_MODE       "MODE"
+#define RAST_SERVED_AP_BSSID	"SERVED_AP_BSSID"
 
 #define RAST_JVALUE_BAND_2G "2"
 #define RAST_JVALUE_BAND_5G "1"
@@ -488,10 +516,6 @@ struct vlan_rules_s {
 
 extern char *read_whole_file(const char *target);
 extern char *get_line_from_buffer(const char *buf, char *line, const int line_size);
-extern char *get_upper_str(const char *const str, char **target);
-extern int upper_strcmp(const char *const str1, const char *const str2);
-extern int upper_strncmp(const char *const str1, const char *const str2, int count);
-extern char *upper_strstr(const char *const str, const char *const target);
 #if defined(HND_ROUTER)
 // defined (__GLIBC__) && !defined(__UCLIBC__)
 size_t strlcpy(char *dst, const char *src, size_t size);
@@ -572,6 +596,8 @@ extern int nvram_pf_match(char *prefix, char *name, char *match);
 extern int nvram_pf_invmatch(char *prefix, char *name, char *invmatch);
 extern double nvram_get_double(const char *key);
 extern int nvram_set_double(const char *key, double value);
+extern int nvram_get_hex(const char *key);
+extern int nvram_set_hex(const char *key, int value);
 #ifdef HND_ROUTER
 extern char *nvram_split_get(const char *key, char *buffer, int maxlen, int maxinst);
 extern int nvram_split_set(const char *key, char *value, int size, int maxinst);
@@ -648,6 +674,10 @@ enum {
 	MODEL_RTAC55U,
 	MODEL_RTAC55UHP,
 	MODEL_RT4GAC55U,
+#if defined(RTAC3200) || defined(RTAC87U) || defined(RTAC56U)		// Kludge
+	MODEL_RTN19,
+	MODEL_RTAC59U,
+#endif
 	MODEL_PLN12,
 	MODEL_PLAC56,
 	MODEL_PLAC66U,
@@ -658,7 +688,12 @@ enum {
 	MODEL_MAPAC2200,
 	MODEL_VZWAC1300,
 	MODEL_MAPAC1750,
+#if defined(RTAC3200) || defined(RTAC87U) || defined(RTAC56U)		// Kludge
 	MODEL_MAPAC3000,
+#else
+	MODEL_RTAC92U,
+	MODEL_MAPAC2200V,
+#endif
 	MODEL_RTN36U3,
 	MODEL_RTN56U,
 	MODEL_RTN65U,
@@ -706,6 +741,7 @@ enum {
 	MODEL_RTN11P_B1,
 	MODEL_RPAC87,
 	MODEL_RTAC85U,
+	MODEL_RTAC85P,
 	MODEL_RTN800HP,
 	MODEL_RTAC88N,
 	MODEL_BRTAC828,
@@ -1047,7 +1083,6 @@ static inline int have_usb3_led(int model)
 		case MODEL_RTAC82U:
 		case MODEL_RTAC55U:
 		case MODEL_RTAC55UHP:
-		case MODEL_MAPAC3000:
 #endif
 		case MODEL_DSLAC68U:
 		case MODEL_RTAC3200:
@@ -1100,8 +1135,6 @@ static inline int have_sata_led(__attribute__ ((unused)) int model) { return 0; 
 #define MAX_NR_WL_IF			4
 #elif defined(RTCONFIG_HAS_5G_2)
 #define MAX_NR_WL_IF			3
-#elif defined(MAPAC2200)
-#define MAX_NR_WL_IF			3
 #elif defined(RTCONFIG_HAS_5G)
 #define MAX_NR_WL_IF			2
 #else	/* ! RTCONFIG_HAS_5G */
@@ -1116,6 +1149,33 @@ enum wl_band_id {
 
 	WL_NR_BANDS				/* Maximum number of Wireless bands of all models. */
 };
+
+static inline int absent_band(enum wl_band_id band)
+{
+	if (band < WL_2G_BAND || band >= WL_NR_BANDS)
+		return 1;
+#if defined(RTCONFIG_RALINK) || defined(RTCONFIG_QCA)
+	if (band >= MAX_NR_WL_IF)
+		return 1;
+#if !defined(RTCONFIG_HAS_5G)
+	if (band == WL_5G_BAND)
+		return 1;
+#if !defined(RTCONFIG_HAS_5G_2)
+	if (band == WL_5G_2_BAND)
+		return 1;
+#endif	/* RTCONFIG_HAS_5G_2 */
+#endif	/* RTCONFIG_HAS_5G */
+#endif	/* RTCONFIG_RALINK || RTCONFIG_QCA */
+#if !defined(RTCONFIG_WIGIG)
+	if (band == WL_60G_BAND)
+		return 1;
+#endif
+
+	if (!nvram_get(wl_nvname("nband", band, 0)))
+		return 1;
+
+	return 0;
+}
 
 #define SKIP_ABSENT_FAKE_IFACE(iface)		if (!strncmp(iface, "FAKE", 4)) { continue; }
 #define SKIP_ABSENT_BAND(u)			if (!nvram_get(wl_nvname("nband", u, 0))) { continue; }
@@ -1235,6 +1295,11 @@ static inline int client_mode()
 static inline int dpsta_mode()
 {
 	return ((sw_mode() == SW_MODE_AP) && (nvram_get_int("wlc_psta") == 2) && (nvram_get_int("wlc_dpsta") == 1));
+}
+#else
+static inline int dpsta_mode()
+{
+	return 0;
 }
 #endif
 
@@ -1419,18 +1484,25 @@ extern uint32_t get_phy_status(uint32_t portmask);
 extern uint32_t get_phy_speed(uint32_t portmask);
 extern uint32_t set_phy_ctrl(uint32_t portmask, int ctrl);
 #endif
+extern void pre_config_switch(void);
+extern void post_config_switch(void);
+extern void __pre_config_switch(void) __attribute__((weak));
+extern void __post_config_switch(void) __attribute__((weak));
 extern char *get_lan_mac_name(void);
 extern char *get_wan_mac_name(void);
 extern char *get_2g_hwaddr(void);
+extern char *get_5g_hwaddr(void);
 extern char *get_lan_hwaddr(void);
 extern char *get_wan_hwaddr(void);
 extern char *get_label_mac(void);
 #if defined(RTCONFIG_QCA)
 extern char *__get_wlifname(int band, int subunit, char *buf);
 extern int get_wlsubnet(int band, const char *ifname);
+extern int get_wlif_unit(const char *wlifname, int *unit, int *subunit);
 extern char *get_wififname(int band);
 extern char *get_staifname(int band);
 extern char *get_vphyifname(int band);
+extern const char *get_5ghigh_ifname(int *band);
 #ifdef IWLIB_H
 extern int get_ap_mac(const char *ifname, struct iwreq *pwrq);
 #endif
@@ -1438,9 +1510,17 @@ extern int chk_assoc(const char *ifname);
 extern int match_radio_status(int unit, int status);
 extern int get_ch(int freq);
 extern int get_channel(const char *ifname);
+extern int get_channel_list(const char *ifname, int ch_list[], int size);
+extern int get_radar_channel_list(const char *vphy, int radar_list[], int size);
+extern int get_bw_nctrlsb(const char *ifname, int *bw, int *nctrlsb);
+extern char *get_wpa_ctrl_sk(int band, char ctrl_sk[], int size);
+extern void set_wpa_cli_cmd(int band, const char *cmd, int chk_reply);
 #endif
 extern char *get_wlifname(int unit, int subunit, int subunit_x, char *buf);
 extern char *get_wlxy_ifname(int x, int y, char *buf);
+#ifdef CONFIG_BCMWL5
+extern char *wl_ifname(int unit, int subunit, char *buf);
+#endif
 #if defined(RTCONFIG_RALINK_MT7620)
 extern int get_mt7620_wan_unit_bytecount(int unit, unsigned long *tx, unsigned long *rx);
 #elif defined(RTCONFIG_RALINK_MT7621)
@@ -1457,13 +1537,20 @@ extern int get_wl_sta_list(void);
 extern int get_maxassoc(char *ifname);
 extern int wl_add_ie(int unit, uint32 pktflag, int ielen, uchar *oui, uchar *data);
 extern void wl_del_ie_with_oui(int unit, uchar *oui);
+extern void wait_connection_finished(int band);
 #endif
 #if defined(RTCONFIG_LANTIQ)
 extern int get_wl_sta_list(void);
 //extern int get_maxassoc(char *ifname);
 extern int get_psta_status(int unit);
 #endif
+extern int wl_get_bw(int unit);
+
 #if defined(RTCONFIG_BCMWL6) && defined(RTCONFIG_PROXYSTA)
+extern int get_psta_status(int unit);
+#endif
+
+#if defined(RTCONFIG_QCA)
 extern int get_psta_status(int unit);
 #endif
 
@@ -1612,7 +1699,8 @@ extern int with_non_dfs_chspec(char *wif);
 extern chanspec_t select_band1_chspec_with_same_bw(char *wif, chanspec_t chanspec);
 extern chanspec_t select_band4_chspec_with_same_bw(char *wif, chanspec_t chanspec);
 extern chanspec_t select_chspec_with_band_bw(char *wif, int band, int bw, chanspec_t chanspec);
-extern void wl_reset_ssid(char *wif);
+extern void wl_list_5g_chans(int unit, int band, char *buf, int len);
+extern int wl_cap(int unit, char *cap_check);
 #endif
 #ifdef RTCONFIG_AMAS
 //extern char *get_pap_bssid(int unit, char bssid_str[]);
@@ -1792,6 +1880,9 @@ static inline int ctrl_wan_gro(__attribute__ ((unused)) int wan_unit, __attribut
 static inline int ctrl_lan_gro(__attribute__ ((unused)) int onoff) { return 0; }
 #endif
 extern int set_irq_smp_affinity(unsigned int irq, unsigned int cpu_mask);
+extern int exec_and_parse(const char *cmd, const char *keyword, const char *fmt, int cnt, ...);
+extern char *iwpriv_get(const char *iface, char *cmd);
+extern int iwpriv_get_int(const char *iface, char *cmd, int *result);
 extern char *get_qos_prefix(int unit, char *buf);
 extern int internet_ready(void);
 extern void set_no_internet_ready(void);
@@ -1800,6 +1891,13 @@ extern enum led_id get_wl_led_id(int band);
 extern char *get_wl_led_gpio_nv(int band);
 #if defined(RTCONFIG_QCA)
 extern char *get_wsup_drvname(int band);
+extern void disassoc_sta(char *ifname, char *sta_addr);
+/* mode: 0:disable, 1:allow, 2:deny */
+void set_maclist_mode(char *ifname, int mode);
+extern void set_maclist_add_kick(char *ifname, int mode, char *sta_addr);
+extern void set_maclist_del_kick(char *ifname, int mode, char *sta_addr);
+void set_macfilter_unit(int unit, int subnet, FILE *fp);
+void set_macfilter_all(FILE *fp);
 #else
 static inline char *get_wsup_drvname(__attribute__ ((unused)) int band) { return ""; }
 #endif
@@ -1816,7 +1914,9 @@ extern struct vlan_rules_s *get_vlan_rules(void);
 extern int get_bonding_status();
 #endif
 extern int isValidMacAddress(const char* mac);
+extern int isValidMacAddr_and_isNotMulticast(const char* mac);
 extern int isValidEnableOption(const char* option, int range);
+extern int isValid_digit_string(const char *string);
 
 /* scripts.c */
 extern void run_custom_script(char *name, int timeout, char *arg1, char *arg2);
@@ -2029,7 +2129,7 @@ extern void set_wifiled(int mode);
 #define RGBLED_3ON3OFF			0x80
 #define RGBLED_BLINK_MESK		RGBLED_SBLINK | RGBLED_3ON1OFF | RGBLED_ATE_MODE | RGBLED_3ON3OFF
 /* color+blink */
-#define RGBLED_BLUE_3ON1OFF		RGBLED_BLUE | RGBLED_3ON1OFF
+#define RGBLED_GREEN_3ON1OFF		RGBLED_GREEN | RGBLED_3ON1OFF
 #define RGBLED_BLUE_3ON3OFF		RGBLED_BLUE | RGBLED_3ON3OFF
 #define RGBLED_PURPLE_3ON1OFF		RGBLED_PURPLE | RGBLED_3ON1OFF
 #define RGBLED_WHITE_SBLINK		RGBLED_WHITE | RGBLED_SBLINK
@@ -2053,11 +2153,11 @@ static inline void enable_wifi_bled(char *ifname)
 #if defined(RTCONFIG_QCA)
 		v = LED_OFF;	/* WiFi not ready. Don't turn on WiFi LED here. */		
 #endif
-#if defined(RTAC1200HP) || defined(RTN56UB1) || defined(RTN56UB2) || defined(RTAC1200GA1) || defined(RTAC1200GU) || defined(RTAC85U)
+#if defined(RTAC1200HP) || defined(RTN56UB1) || defined(RTN56UB2) || defined(RTAC1200GA1) || defined(RTAC1200GU) || defined(RTAC85U) || defined(RTAC85P)
 		if(!get_radio(1, 0) && unit==1) //*5G WiFi not ready. Don't turn on WiFi GPIO LED . */
 		 	v=LED_OFF;
 #endif		
-#if defined(RTN56UB1) || defined(RTN56UB2) || defined(RTAC1200GA1) || defined(RTAC1200GU) || defined(RTAC85U) || defined(RTN800HP)
+#if defined(RTN56UB1) || defined(RTN56UB2) || defined(RTAC1200GA1) || defined(RTAC1200GU) || defined(RTAC85U) || defined(RTAC85P) || defined(RTN800HP)
 		if(!get_radio(0, 0) && unit==0) //*2G WiFi not ready. Don't turn on WiFi GPIO LED . */
 		 	v=LED_OFF;
 #endif		
@@ -2267,7 +2367,6 @@ extern int init_enc_nvram(void);
 
 /* amas_utils.c */
 #ifdef RTCONFIG_AMAS
-extern int is_wlsta_exist(int unit, int vidx);
 extern int is_wlsta_connect(int unit, int vidx, char *macaddr);
 extern void set_deauth_sta(int bssidx, int vifidx, char *mac_addr);
 #endif
@@ -2415,4 +2514,40 @@ extern int getAmasSupportMode();
 
 #endif  /* defined(RTCONFIG_SW_HW_AUTH) && defined(RTCONFIG_AMAS) */
 
+#if defined(RTCONFIG_AMAS)
+
+typedef enum __amaslib_action__t_
+{
+	AMASLIB_ACTION_NODE_MAC_UPDATE = 0,
+	AMASLIB_ACTION_DEVICE_IP_QUERY
+} AMASLIB_ACTION_T;
+/*
+	AMAS_LIB define for event and socket
+*/
+typedef struct __amaslib_notification__t_
+{
+	AMASLIB_ACTION_T action;
+	char sta2g[18];     /* Node 2G MAC */
+	char sta5g[18];     /* Node 5G MAC */
+	int  flag;          /* Node status */
+	char ip[16];        /* Device IP */
+} AMASLIB_EVENT_T;
+
+#define AMASLIB_PID_PATH           "/var/run/amas_lib.pid"
+#define AMASLIB_SOCKET_PATH        "/etc/amas_lib_socket"
+#define MAX_AMASLIB_SOCKET_CLIENT  5
+
+/* DEBUG DEFINE */
+#define AMASLIB_DEBUG             "/tmp/AMASLIB_DEBUG"
+#define AMASLIB_DBG(fmt,args...) \
+	if(f_exists(AMASLIB_DEBUG) > 0) { \
+		_dprintf("[AMASLIB][%s:(%d)]"fmt, __FUNCTION__, __LINE__, ##args); \
+	}
+
+extern int AMAS_EVENT_TRIGGER(char *sta2g, char *sta5g, int flag);
+extern int is_amaslib_enabled();
+
+#endif /* defined(RTCONFIG_AMAS) */
+
+extern int get_chance_to_control(void);
 #endif	/* !__SHARED_H__ */
