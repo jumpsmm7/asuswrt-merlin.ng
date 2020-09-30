@@ -1,7 +1,6 @@
 #!/bin/sh
 
-wget_timeout=`nvram get apps_wget_timeout`
-wget_options="-q -t 2 -T $wget_timeout"
+wget_options="-q -t 2 -T 30"
 
 nvram set cfg_note=0
 get_preferred_lang=`nvram get preferred_lang`
@@ -17,16 +16,16 @@ fi
 new_firm=`echo $2 | sed s/'\.'/_/4 | sed s/'\.'//g;`
 echo "---- $new_firm ----" >> /tmp/webs_note.log
 
-if [ $new_firm == $(nvram get webs_state_info) ]; then
-	releasenote_file=$(nvram get webs_state_info_am)_note.txt
-	releasenote_US=$releasenote_file
-	fwsite=$(nvram get firmware_server)
-	fwsiteSQ=$fwsite"/test"
-else
+if echo $2 | grep -q "\."; then
 	releasenote_file=$1_"$new_firm"_"$LANG"_note.zip
 	releasenote_file_US=$1_"$new_firm"_US_note.zip
 	fwsite="https://dlcdnets.asus.com/pub/ASUS/wireless/ASUSWRT/"
 	fwsiteSQ="https://dlcdnets.asus.com/pub/ASUS/LiveUpdate/Release/Wireless_SQ/"
+else
+	releasenote_file=$(nvram get webs_state_info_am)_note.txt
+	releasenote_US=$releasenote_file
+	fwsite=$(nvram get firmware_server)
+	fwsiteSQ=$fwsite"/test"
 fi
 releasenote_path="/tmp/release_note.txt"
 

@@ -25,6 +25,8 @@
 #ifndef DROPBEAR_INCLUDES_H_
 #define DROPBEAR_INCLUDES_H_
 
+/* uclibc needs _GNU_SOURCE, maybe other things? */
+#define _GNU_SOURCE
 
 #include "options.h"
 #include "debug.h"
@@ -57,10 +59,6 @@
 #include <dirent.h>
 #include <time.h>
 #include <setjmp.h>
-
-#ifdef RTCONFIG_PROTECTION_SERVER
-#include <libptcsrv.h>
-#endif
 
 #ifdef HAVE_UTMP_H
 #include <utmp.h>
@@ -128,6 +126,10 @@
 #include <sys/uio.h>
 #endif
 
+#ifdef HAVE_SYS_RANDOM_H
+#include <sys/random.h>
+#endif
+
 #ifdef BUNDLED_LIBTOM
 #include "libtomcrypt/src/headers/tomcrypt.h"
 #include "libtommath/tommath.h"
@@ -168,6 +170,10 @@ typedef u_int32_t uint32_t;
 #include <linux/pkt_sched.h>
 #endif
 
+#if DROPBEAR_PLUGIN
+#include <dlfcn.h>
+#endif
+
 #include "fake-rfc2553.h"
 
 #include "fuzz.h"
@@ -184,6 +190,10 @@ typedef u_int32_t uint32_t;
 # define UNUSED(x) /*@unused@*/ x 
 #else 
 # define UNUSED(x) x 
+#endif
+
+#ifdef SECURITY_NOTIFY
+#include <libptcsrv.h>
 #endif
 
 #endif /* DROPBEAR_INCLUDES_H_ */

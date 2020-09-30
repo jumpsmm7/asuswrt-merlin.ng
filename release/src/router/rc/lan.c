@@ -4400,19 +4400,20 @@ lan_up(char *lan_ifname)
 
 	/* Set default route to gateway if specified */
 	if(access_point_mode()
-		|| (((repeater_mode() && (nvram_get_int("wlc_state") == WLC_STATE_CONNECTED))
+		|| ((repeater_mode()
 #if defined(RTCONFIG_BCMWL6) && defined(RTCONFIG_PROXYSTA)
-			|| psr_mode() || mediabridge_mode())
+			|| psr_mode() || mediabridge_mode()
 #elif defined(RTCONFIG_REALTEK) || defined(RTCONFIG_QCA)
-			|| mediabridge_mode())
+			|| mediabridge_mode()
 #endif
 #ifdef RTCONFIG_DPSTA
-			&& !(dpsta_mode() && nvram_get_int("re_mode") == 0)
+			|| (dpsta_mode() && nvram_get_int("re_mode") == 0)
 #endif
+		    ) && nvram_get_int("wlc_state") == WLC_STATE_CONNECTED)
 #if defined(RTCONFIG_AMAS)
-		&& !(nvram_get_int("re_mode") == 1)
+		|| (nvram_get_int("re_mode") == 1)
 #endif
-	)) {
+	) {
 		route_add(lan_ifname, 0, "0.0.0.0", nvram_safe_get("lan_gateway"), "0.0.0.0");
 
 		refresh_ntpc();
@@ -6249,7 +6250,7 @@ void start_lan_port(int dt)
 	}
 
 #ifdef RTCONFIG_QTN
-	if (nvram_get_int("qtn_ready") == 0)
+	if (nvram_get_int("qtn_ready") == 1)
 		dbG("do not start lan port due to QTN not ready\n");
 	else
 		lanport_ctrl(1);

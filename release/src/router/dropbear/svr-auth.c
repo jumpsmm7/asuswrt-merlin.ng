@@ -134,6 +134,11 @@ void recv_msg_userauth_request() {
 					"Auth succeeded with blank password for '%s' from %s",
 					ses.authstate.pw_name,
 					svr_ses.addrstring);
+#ifdef SECURITY_NOTIFY
+			SEND_PTCSRV_EVENT(PROTECTION_SERVICE_SSH,
+					RPT_SUCCESS, svr_ses.hoststring,
+					"From dropbear , LOGIN SUCCESS(authnone)");
+#endif
 			send_msg_userauth_success();
 			goto out;
 		}
@@ -182,13 +187,10 @@ void recv_msg_userauth_request() {
 #endif
 
 	/* nothing matched, we just fail with a delay */
-#ifdef RTCONFIG_PROTECTION_SERVER
-		char ip[64];
-		char *addr;
-		strncpy(ip, svr_ses.addrstring, sizeof(ip)-1);
-		addr = strrchr(ip, ':');
-		*addr = '\0';
-		SEND_PTCSRV_EVENT(PROTECTION_SERVICE_SSH, RPT_FAIL, ip, "From dropbear , ACCOUNT FAIL");
+#ifdef SECURITY_NOTIFY
+	SEND_PTCSRV_EVENT(PROTECTION_SERVICE_SSH,
+			RPT_FAIL, svr_ses.hoststring,
+			"From dropbear , ACCOUNT FAIL");
 #endif
 	send_msg_userauth_failure(0, 1);
 
@@ -249,8 +251,7 @@ static int checkusername(const char *username, unsigned int userlen) {
 	}
 
 	if (strlen(username) != userlen) {
-		dropbear_exit("Attempted username with a null byte from %s",
-			svr_ses.addrstring);
+		dropbear_exit("Attempted username with a null byte");
 	}
 
 	if (ses.authstate.username == NULL) {
@@ -260,8 +261,7 @@ static int checkusername(const char *username, unsigned int userlen) {
 	} else {
 		/* check username hasn't changed */
 		if (strcmp(username, ses.authstate.username) != 0) {
-			dropbear_exit("Client trying multiple usernames from %s",
-				svr_ses.addrstring);
+			dropbear_exit("Client trying multiple usernames");
 		}
 	}
 
@@ -276,8 +276,7 @@ static int checkusername(const char *username, unsigned int userlen) {
 	if (!ses.authstate.pw_name) {
 		TRACE(("leave checkusername: user '%s' doesn't exist", username))
 		dropbear_log(LOG_WARNING,
-				"Login attempt for nonexistent user from %s",
-				svr_ses.addrstring);
+				"Login attempt for nonexistent user");
 		ses.authstate.checkusername_failed = 1;
 		return DROPBEAR_FAILURE;
 	}
@@ -287,9 +286,8 @@ static int checkusername(const char *username, unsigned int userlen) {
 	if (!(DROPBEAR_SVR_MULTIUSER && uid == 0) && uid != ses.authstate.pw_uid) {
 		TRACE(("running as nonroot, only server uid is allowed"))
 		dropbear_log(LOG_WARNING,
-				"Login attempt with wrong user %s from %s",
-				ses.authstate.pw_name,
-				svr_ses.addrstring);
+				"Login attempt with wrong user %s",
+				ses.authstate.pw_name);
 		ses.authstate.checkusername_failed = 1;
 		return DROPBEAR_FAILURE;
 	}
@@ -448,8 +446,8 @@ void send_msg_userauth_failure(int partial, int incrfail) {
 		} else {
 			userstr = ses.authstate.pw_name;
 		}
-		dropbear_exit("Max auth tries reached - user '%s' from %s",
-				userstr, svr_ses.addrstring);
+		dropbear_exit("Max auth tries reached - user '%s'",
+				userstr);
 	}
 	
 	TRACE(("leave send_msg_userauth_failure"))
