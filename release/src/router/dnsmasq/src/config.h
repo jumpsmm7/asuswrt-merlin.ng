@@ -1,4 +1,4 @@
-/* dnsmasq is Copyright (c) 2000-2018 Simon Kelley
+/* dnsmasq is Copyright (c) 2000-2020 Simon Kelley
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,7 +19,9 @@
 #define CHILD_LIFETIME 150 /* secs 'till terminated (RFC1035 suggests > 120s) */
 #define TCP_MAX_QUERIES 100 /* Maximum number of queries per incoming TCP connection */
 #define TCP_BACKLOG 32  /* kernel backlog limit for TCP connections */
+#ifndef EDNS_PKTSZ
 #define EDNS_PKTSZ 4096 /* default max EDNS.0 UDP packet from RFC5625 */
+#endif
 #define SAFE_PKTSZ 1280 /* "go anywhere" UDP packet size */
 #define KEYBLOCK_LEN 40 /* choose to minimise fragmentation when storing DNSSEC keys */
 #define DNSSEC_WORK 50 /* Max number of queries to validate one question */
@@ -50,6 +52,7 @@
 #define RANDFILE "/dev/urandom"
 #define DNSMASQ_SERVICE "uk.org.thekelleys.dnsmasq" /* Default - may be overridden by config */
 #define DNSMASQ_PATH "/uk/org/thekelleys/dnsmasq"
+#define DNSMASQ_UBUS_NAME "dnsmasq" /* Default - may be overridden by config */
 #define AUTH_TTL 600 /* default TTL for auth DNS */
 #define SOA_REFRESH 1200 /* SOA refresh default */
 #define SOA_RETRY 180 /* SOA retry default */
@@ -284,11 +287,16 @@ HAVE_SOCKADDR_SA_LEN
 #define HAVE_BSD_NETWORK
 #define HAVE_GETOPT_LONG
 #define HAVE_SOCKADDR_SA_LEN
+#define NO_IPSET
 /* Define before sys/socket.h is included so we get socklen_t */
 #define _BSD_SOCKLEN_T_
 /* Select the RFC_3542 version of the IPv6 socket API. 
    Define before netinet6/in6.h is included. */
-#define __APPLE_USE_RFC_3542 
+#define __APPLE_USE_RFC_3542
+/* Required for Mojave. */
+#ifndef SOL_TCP
+#  define SOL_TCP IPPROTO_TCP
+#endif
 #define NO_IPSET
 
 #elif defined(__NetBSD__)

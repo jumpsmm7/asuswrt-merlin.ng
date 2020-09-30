@@ -730,8 +730,17 @@ endif
 ifneq ($(RTCONFIG_DBLOG),y)
 	rm -rf $(INSTALLDIR)/www/images/New_ui/dblog_diag.gif
 endif
-ifeq ($(and $(RTCONFIG_AMAS),$(RTCONFIG_WIFI_SON)),y)
-	rm -rf $(INSTALLDIR)/www-sys
-	mv $(INSTALLDIR)/www/www-sys $(INSTALLDIR)/www-sys
-endif
 	mkdir -p $(INSTALLDIR)/www
+
+	ln -sf user/user1.asp $(INSTALLDIR)/www/user1.asp
+	ln -sf user/user2.asp $(INSTALLDIR)/www/user2.asp
+	ln -sf user/user3.asp $(INSTALLDIR)/www/user3.asp
+	ln -sf user/user4.asp $(INSTALLDIR)/www/user4.asp
+	ln -sf user/user5.asp $(INSTALLDIR)/www/user5.asp
+	ln -sf user/user6.asp $(INSTALLDIR)/www/user6.asp
+	ln -sf user/user7.asp $(INSTALLDIR)/www/user7.asp
+	ln -sf user/user8.asp $(INSTALLDIR)/www/user8.asp
+	ln -sf user/user9.asp $(INSTALLDIR)/www/user9.asp
+	ln -sf user/user10.asp $(INSTALLDIR)/www/user10.asp
+
+	rm -rf $(INSTALLDIR)/www/Advanced_Feedback.asp
