@@ -1682,9 +1682,9 @@ void start_dnsmasq(void)
 		if (*value)
 			fprintf(fp, "dhcp-option=lan,option6:24,%s\n", value);
 
-		/* NTP server */
+		/* SNTP server */
 		if (nvram_get_int("ntpd_enable"))
-			fprintf(fp, "dhcp-option=lan,option6:56,%s\n", "[::]");
+			fprintf(fp, "dhcp-option=lan,option6:31,%s\n", "[::]");
 	}
 #endif
 
@@ -3517,6 +3517,7 @@ start_ddns(void)
 		service = "update@asus.com";
 		user = get_lan_hwaddr();
 		passwd = nvram_safe_get("secret_code");
+		asus_ddns = 1;
 	}
 	else if (strcmp(server, "DOMAINS.GOOGLE.COM") == 0)
 		service = "default@domains.google.com";
@@ -3593,6 +3594,10 @@ start_ddns(void)
 				fprintf(fp, "wildcard = true\n");
 
 			fprintf(fp, "}\n");
+#if 1
+			if (asus_ddns == 1)
+				fprintf(fp, "secure-ssl = false\n");
+#endif
 
 			append_custom_config("inadyn.conf", fp);
 
@@ -3615,6 +3620,9 @@ start_ddns(void)
 			                 "-e", "/sbin/ddns_updated",
 					"--exec-nochg", "/sbin/ddns_updated",
 			                 "-l", loglevel,
+#ifdef RTCONFIG_LETSENCRYPT
+			                 (asus_ddns == 1 ? "-1" : NULL),
+#endif
 			                 NULL };
 
 			_eval(argv, NULL, 0, &pid);
@@ -3757,6 +3765,9 @@ asusddns_reg_domain(int reg)
 		fprintf(fp, "username = %s\n", get_lan_hwaddr());
 		fprintf(fp, "password = %s\n", nvram_safe_get("secret_code"));
 		fprintf(fp, "}\n");
+#if 1
+		fprintf(fp, "secure-ssl = false\n");
+#endif
 		fclose(fp);
 
 		if((time_fp=fopen("/tmp/ddns.cache","w"))) {
@@ -3832,6 +3843,9 @@ _dprintf("%s: do inadyn to unregister! unit = %d wan_ifname = %s nserver = %s ho
 		fprintf(fp, "username = %s\n", get_lan_hwaddr());
 		fprintf(fp, "password = %s\n", nvram_safe_get("secret_code"));
 		fprintf(fp, "}\n");
+#if 1
+		fprintf(fp, "secure-ssl = false\n");
+#endif
 		fclose(fp);
 
 /*

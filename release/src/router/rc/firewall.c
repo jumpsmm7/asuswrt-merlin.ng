@@ -1688,9 +1688,7 @@ void nat_setting(char *wan_if, char *wan_ip, char *wanx_if, char *wanx_ip, char 
 
 #ifdef RTCONFIG_NTPD
 	if (nvram_get_int("ntpd_enable") && nvram_get_int("ntpd_server_redir")) {
-		fprintf(fp, "-A PREROUTING -i %s -p udp -m udp --dport 123 -j REDIRECT --to-port 123\n"
-			    "-A PREROUTING -i %s -p tcp -m tcp --dport 123 -j REDIRECT --to-port 123\n",
-			    lan_if, lan_if);
+		fprintf(fp, "-A PREROUTING -i %s -p udp -m udp --dport 123 -j REDIRECT --to-port 123\n", lan_if);
 	}
 #endif
 
@@ -2080,9 +2078,7 @@ void nat_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)	//
 
 #ifdef RTCONFIG_NTPD
 	if (nvram_get_int("ntpd_enable") && nvram_get_int("ntpd_server_redir")) {
-		fprintf(fp, "-A PREROUTING -i %s -p udp -m udp --dport 123 -j REDIRECT --to-port 123\n"
-		            "-A PREROUTING -i %s -p tcp -m tcp --dport 123 -j REDIRECT --to-port 123\n",
-		            lan_if, lan_if);
+		fprintf(fp, "-A PREROUTING -i %s -p udp -m udp --dport 123 -j REDIRECT --to-port 123\n", lan_if);
 	}
 #endif
 
@@ -3759,15 +3755,14 @@ TRACE_PT("writing Parental Control\n");
 					snprintf(srciprule, sizeof(srciprule), "-s %s", srcip);
 				else
 					srciprule[0] = '\0';
-				if (dstip[0] != '\0')
-					snprintf(dstiprule, sizeof(dstiprule), "-d %s", dstip);
-				else
+				if (strlen(dstip) > 2) {
+					if (dstip[0] == ':' && dstip[1] == ':' && dstip[2] != '\0' && dstip[2] != '/') // dstip is EUI64 address
+						snprintf(dstiprule, sizeof(dstiprule), "-d %s/::ffff:ffff:ffff:ffff", dstip);
+					else
+						snprintf(dstiprule, sizeof(dstiprule), "-d %s", dstip);
+				} else {
 					dstiprule[0] = '\0';
-				if (dstip[0] == ':' && dstip[1] == ':') // dstip is EUI64 address
-					snprintf(dstiprule, sizeof(dstiprule), "-d %s/::ffff:ffff:ffff:ffff", dstip);
-				else
-					snprintf(dstiprule, sizeof(dstiprule), "-d %s", dstip);
-
+				}
 				portp = portv = strdup(port);
 				while (portv && (dstports = strsep(&portp, ",")) != NULL) {
 					if (strcmp(proto, "TCP") == 0 || strcmp(proto, "BOTH") == 0)
@@ -4872,25 +4867,33 @@ TRACE_PT("writing Parental Control\n");
 			nvp = nv = strdup(nvram_safe_get("ipv6_fw_rulelist"));
 			while (nv && (b = strsep(&nvp, "<")) != NULL) {
 				char *portv, *portp, *port, *desc, *dstports;
-				char srciprule[64];
+				char srciprule[64], dstiprule[64];
 				if ((vstrsep(b, ">", &desc, &srcip, &dstip, &port, &proto) != 5))
 					continue;
 				if (srcip[0] != '\0')
 					snprintf(srciprule, sizeof(srciprule), "-s %s", srcip);
 				else
 					srciprule[0] = '\0';
+				if (strlen(dstip) > 2) {
+					if (dstip[0] == ':' && dstip[1] == ':' && dstip[2] != '\0' && dstip[2] != '/') // dstip is EUI64 address
+						snprintf(dstiprule, sizeof(dstiprule), "-d %s/::ffff:ffff:ffff:ffff", dstip);
+					else
+						snprintf(dstiprule, sizeof(dstiprule), "-d %s", dstip);
+				} else {
+					dstiprule[0] = '\0';
+				}
 				portp = portv = strdup(port);
 				while (portv && (dstports = strsep(&portp, ",")) != NULL) {
 					if (strcmp(proto, "TCP") == 0 || strcmp(proto, "BOTH") == 0)
-						fprintf(fp_ipv6, "-A FORWARD -m state --state NEW -p tcp -m tcp %s -d %s --dport %s -j %s\n",
-							srciprule, dstip, dstports, logaccept);
+						fprintf(fp_ipv6, "-A FORWARD -m state --state NEW -p tcp -m tcp %s %s --dport %s -j %s\n",
+							srciprule, dstiprule, dstports, logaccept);
 					if (strcmp(proto, "UDP") == 0 || strcmp(proto, "BOTH") == 0)
-						fprintf(fp_ipv6, "-A FORWARD -m state --state NEW -p udp -m udp %s -d %s --dport %s -j %s\n",
-							srciprule, dstip, dstports, logaccept);
+						fprintf(fp_ipv6, "-A FORWARD -m state --state NEW -p udp -m udp %s %s --dport %s -j %s\n",
+							srciprule, dstiprule, dstports, logaccept);
 					// Handle raw protocol in port field, no val1:val2 allowed
 					if (strcmp(proto, "OTHER") == 0) {
 						protono = strsep(&dstports, ":");
-						fprintf(fp_ipv6, "-A FORWARD -p %s %s -d %s -j %s\n", protono, srciprule, dstip, logaccept);
+						fprintf(fp_ipv6, "-A FORWARD -p %s %s %s -j %s\n", protono, srciprule, dstiprule, logaccept);
 					}
 				}
 				free(portv);
@@ -5721,7 +5724,7 @@ mangle_setting2(char *lan_if, char *lan_ip, char *logaccept, char *logdrop)
 
 /* Workaround for neighbour solicitation flood from Comcast */
 #ifdef RTCONFIG_IPV6
-	if (nvram_get_int("ipv6_neighsol_drop")) {
+	if (nvram_get_int("ipv6_ns_drop")) {
 		for(unit = WAN_UNIT_FIRST; unit < WAN_UNIT_MAX; ++unit){
 			eval("ip6tables", "-t", "mangle", "-A", "PREROUTING", "-p", "icmpv6", "--icmpv6-type", "neighbor-solicitation",
 			     "-i", get_wan_ifname(unit), "-d", "ff02::1:ff00:0/104", "-j", "DROP");

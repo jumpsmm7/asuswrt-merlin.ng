@@ -457,7 +457,7 @@ var cloudsync_support = isSupport("cloudsync");
 var nocloudsync_support = isSupport("nocloudsync");
 var aicloudipk_support = isSupport("aicloudipk");
 var yadns_hideqis = isSupport("yadns_hideqis");
-var yadns_support = yadns_hideqis || isSupport("yadns");
+var yadns_support = false;	//yadns_hideqis || isSupport("yadns");
 var dnspriv_support = isSupport("dnspriv");
 var manualstb_support = isSupport("manual_stb"); 
 var wps_multiband_support = isSupport("wps_multiband");
@@ -1893,7 +1893,7 @@ function show_loading_obj(){
 	code +='<table cellpadding="5" cellspacing="0" id="loadingBlock" class="loadingBlock" align="center">\n';
 	code +='<tr>\n';
 	code +='<td width="20%" height="80" align="center"><img src="/images/loading.gif"></td>\n';
-	code +='<td><span id="proceeding_main_txt"><#Main_alert_proceeding_desc4#></span><span id="proceeding_txt" style="color:#FFFFCC;"></span></td>\n';
+	code +='<td><span id="proceeding_main_txt" style="color:#FFFFFF;"><#Main_alert_proceeding_desc4#></span> <span id="proceeding_txt" style="color:#FFFFFF;"></span></td>\n'
 	code +='</tr>\n';
 	code +='</table>\n';
 	code +='<!--[if lte IE 6.5]><iframe class="hackiframe"></iframe><![endif]-->\n';

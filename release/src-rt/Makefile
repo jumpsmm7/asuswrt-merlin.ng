@@ -401,7 +401,7 @@ else
 endif
 	@echo '#endif' >> router/shared/version.h
 endif
-	@echo '$(BUILD_NAME) $(SERIALNO)-$(EXTENDNO)$(BUILDREV) $(BUILD_TIME)' > router/shared/version
+	@echo '$(BUILD_NAME) $(SERIALNO)_$(EXTENDNO)$(BUILDREV) $(BUILD_TIME)' > router/shared/version
 	@echo 'EXTENDNO=$(EXTENDNO)$(BUILDREV)' > router/extendno.conf
 
 rt_ver_ntools:
@@ -3942,7 +3942,7 @@ fi; \
 		sed -i "/CONFIG_NETFILTER is not set/d" $(1); \
 		echo "CONFIG_NETFILTER=y" >>$(1); \
 		sed -i "/CONFIG_NETFILTER_XTABLES is not set/d" $(1); \
-		echo "CCONFIG_NETFILTER_XTABLES=y" >>$(1); \
+		echo "CONFIG_NETFILTER_XTABLES=y" >>$(1); \
 		sed -i "/CONFIG_NETFILTER_XT_MATCH_POLICY is not set/d" $(1); \
 		echo "CONFIG_NETFILTER_XT_MATCH_POLICY=y" >>$(1); \
 		echo "# CONFIG_XFRM_SUB_POLICY is not set" >>$(1); \
